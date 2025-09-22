@@ -1,0 +1,135 @@
+<!-- app/templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inference Results</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 2em;
+            background-color: #f4f4f9;
+        }
+
+        h1,
+        h2 {
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .timing-info {
+            background-color: #eef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .timing-info p {
+            margin: 5px 0;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .result-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .result-card h3 {
+            margin-top: 0;
+            font-size: 1em;
+        }
+
+        .image-trio {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .image-trio div {
+            flex: 1;
+        }
+
+        .image-trio img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+        }
+
+        .input-images {
+            border-right: 2px solid #007bff;
+            padding-right: 10px;
+        }
+
+        .ground-truth {
+            border-right: 2px solid #28a745;
+            padding-right: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Local Model Inference Report</h1>
+        <p><strong>Model:</strong> {{ model_name }} | <strong>Modality:</strong> {{ modality }}</p>
+
+        {% for benchmark in benchmarks %}
+        <div class="timing-info">
+            <h2>Benchmark: {{ benchmark.num_files }} File(s)</h2>
+            <p><strong>Total Time:</strong> {{ "%.4f"|format(benchmark.total_time) }} seconds</p>
+            <p><strong>Average Time per Tile:</strong> {{ "%.4f"|format(benchmark.avg_time) }} seconds</p>
+        </div>
+        {% endfor %}
+
+        <h2>Visual Results (from the {{ benchmarks[0].num_files }}-file run)</h2>
+        <div class="result-grid">
+            {% for result in results %}
+            <div class="result-card">
+                <h3>Tile ID: {{ result.id }}</h3>
+                <div class="image-trio">
+                    <div class="input-images">
+                        <h4>Input(s)</h4>
+                        <!-- Adaptive display of input images -->
+                        {% if result.inputs.satellite %}
+                        <img src="{{ url_for('static', path=result.inputs.satellite) }}" alt="Satellite Input">
+                        {% endif %}
+                        {% if result.inputs.bc %}
+                        <img src="{{ url_for('static', path=result.inputs.bc) }}" alt="BC Input">
+                        {% endif %}
+                        {% if result.inputs.bh %}
+                        <img src="{{ url_for('static', path=result.inputs.bh) }}" alt="BH Input">
+                        {% endif %}
+                    </div>
+                    <div class="ground-truth">
+                        <h4>Ground Truth</h4>
+                        <img src="{{ url_for('static', path=result.ground_truth) }}" alt="Ground Truth Mask">
+                    </div>
+                    <div>
+                        <h4>Prediction</h4>
+                        <img src="{{ url_for('static', path=result.prediction) }}" alt="Predicted Mask">
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+
+</html>

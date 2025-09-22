@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+torch
+albumentations
+numpy
+Pillow
+rasterio
+jinja2
+tqdm
