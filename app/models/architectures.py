@@ -181,6 +181,189 @@ class ConvNeXtUNet(nn.Module):
         features = self.encoder(x)
         return self.decoder(features)
 
+class SettleNet(nn.Module):
+    """
+    SettleNet architecture with three parallel 3-stage ConvNeXt encoders,
+    fused at multiple stages, with a bridge to a shared 4-stage ConvNeXt decoder.
+    This implementation REPLACES the previous 4-stage encoder version.
+    """
 
-# Add SettleNet and its specific 3-stage encoder here if you plan to test it
-# For brevity, this example focuses on ConvNeXtUNet.
+    def __init__(self, config: Config):
+        super().__init__()
+        dims = config.ENCODER_CHANNEL_LIST
+
+        if len(dims) < 4:
+            raise ValueError(
+                "SettleNet requires ENCODER_CHANNEL_LIST to have at least 4 values for its bridge and decoder."
+            )
+
+        # Encoders are all the new, lighter 3-stage version
+        self.encoder_rgb = ConvNeXtEncoder_3Stage(config, in_chans=3)
+        self.encoder_bc = ConvNeXtEncoder_3Stage(config, in_chans=1)
+        self.encoder_bh = ConvNeXtEncoder_3Stage(config, in_chans=1)
+
+        # Fusion Blocks for the 3 encoder stages
+        self.fusion_blocks = nn.ModuleList(
+            [
+                FusionBlock([dims[0], dims[0], dims[0]], dims[0]),
+                FusionBlock([dims[1], dims[1], dims[1]], dims[1]),
+                FusionBlock([dims[2], dims[2], dims[2]], dims[2]),
+            ]
+        )
+
+        # The "Bridge" layer to create the 4th stage feature map
+        self.bottleneck_bridge = nn.Sequential(
+            LayerNorm(dims[2], eps=1e-6, data_format="channels_first"),
+            nn.Conv2d(dims[2], dims[3], kernel_size=2, stride=2),
+        )
+
+        # Use the ORIGINAL 4-stage decoder
+        self.decoder = ConvNeXtDecoder(config, encoder_channels=dims)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x_rgb, x_bc, x_bh = x[:, :3, :, :], x[:, 3:4, :, :], x[:, 4:5, :, :]
+
+        feat_rgb = self.encoder_rgb(x_rgb)
+        feat_bc = self.encoder_bc(x_bc)
+        feat_bh = self.encoder_bh(x_bh)
+
+        fused_s1 = self.fusion_blocks[0]([feat_rgb["s1"], feat_bc["s1"], feat_bh["s1"]])
+        fused_s2 = self.fusion_blocks[1]([feat_rgb["s2"], feat_bc["s2"], feat_bh["s2"]])
+        fused_s3 = self.fusion_blocks[2]([feat_rgb["s3"], feat_bc["s3"], feat_bh["s3"]])
+
+        # Apply the bridge to create the s4 feature map for the decoder
+        bottleneck_s4 = self.bottleneck_bridge(fused_s3)
+
+        # Assemble the dictionary with all 4 feature maps the decoder needs
+        decoder_features = {
+            "s1": fused_s1,
+            "s2": fused_s2,
+            "s3": fused_s3,
+            "s4": bottleneck_s4,
+        }
+
+        return self.decoder(decoder_features)
+
+
+# --- Define Fusion and Attention Blocks used by SettleNet ---
+class ChannelAttention(nn.Module):
+    def __init__(self, in_planes, ratio=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False),
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        return x * self.sigmoid(
+            self.fc(self.avg_pool(x)) + self.fc(self.max_pool(x))
+        ).expand_as(x)
+
+
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size=7):
+        super().__init__()
+        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        return x * self.sigmoid(
+            self.conv1(torch.cat([torch.mean(x, 1, True), torch.max(x, 1, True)[0]], 1))
+        ).expand_as(x)
+
+
+class CBAM(nn.Module):
+    def __init__(self, in_planes):
+        super().__init__()
+        self.ca = ChannelAttention(in_planes)
+        self.sa = SpatialAttention()
+
+    def forward(self, x):
+        return self.sa(self.ca(x))
+
+
+class FusionBlock(nn.Module):
+    def __init__(self, in_channels_list, out_channels):
+        super().__init__()
+        total_in = sum(in_channels_list)
+        self.cbam = CBAM(total_in)
+        self.compress_conv = nn.Sequential(
+            nn.Conv2d(total_in, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True),
+        )
+
+    def forward(self, features):
+        return self.compress_conv(self.cbam(torch.cat(features, 1)))
+
+
+class ConvNeXtEncoder_3Stage(nn.Module):
+    """A standalone, explicit 3-stage ConvNeXt encoder written sequentially."""
+
+    def __init__(self, config: Config, in_chans: int):
+        super().__init__()
+        dims = config.ENCODER_CHANNEL_LIST[:3]
+        depths = config.ENCODER_BLOCKS_PER_STAGE[:3]
+        total_blocks = sum(depths)
+        dp_rates = [
+            x.item()
+            for x in torch.linspace(0, config.ENCODER_DROP_PATH_RATE, total_blocks)
+        ]
+        cursor = 0
+
+        self.stem = nn.Sequential(
+            nn.Conv2d(in_chans, dims[0], 4, 4),
+            LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+        )
+        stage0_dp = dp_rates[cursor : cursor + depths[0]]
+        cursor += depths[0]
+        self.stage0 = nn.Sequential(
+            *[
+                ConvNeXtBlock(dims[0], dpr, config.ENCODER_LAYER_SCALE_INIT_VALUE)
+                for dpr in stage0_dp
+            ]
+        )
+        self.downsampler1 = nn.Sequential(
+            LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+            nn.Conv2d(dims[0], dims[1], 2, 2),
+        )
+        stage1_dp = dp_rates[cursor : cursor + depths[1]]
+        cursor += depths[1]
+        self.stage1 = nn.Sequential(
+            *[
+                ConvNeXtBlock(dims[1], dpr, config.ENCODER_LAYER_SCALE_INIT_VALUE)
+                for dpr in stage1_dp
+            ]
+        )
+        self.downsampler2 = nn.Sequential(
+            LayerNorm(dims[1], eps=1e-6, data_format="channels_first"),
+            nn.Conv2d(dims[1], dims[2], 2, 2),
+        )
+        stage2_dp = dp_rates[cursor : cursor + depths[2]]
+        cursor += depths[2]
+        self.stage2 = nn.Sequential(
+            *[
+                ConvNeXtBlock(dims[2], dpr, config.ENCODER_LAYER_SCALE_INIT_VALUE)
+                for dpr in stage2_dp
+            ]
+        )
+
+    def forward(self, x):
+        s1 = self.stage0(self.stem(x))
+        s2 = self.stage1(self.downsampler1(s1))
+        s3 = self.stage2(self.downsampler2(s2))
+        return {"s1": s1, "s2": s2, "s3": s3}

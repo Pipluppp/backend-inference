@@ -1,6 +1,8 @@
 app/static/
 data/
 trained_models/
+test_output/
+web_demo/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

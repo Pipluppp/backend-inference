@@ -8,19 +8,26 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, UploadFile, File, Form
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+import tempfile
+import zipfile
+import shutil
 
 # Local module imports
-from app.utils.config import setup_config
+from app.utils.config import setup_config, get_model_config
 from app.utils.data_processing import (
     get_test_file_ids,
     load_and_preprocess_image,
     load_ground_truth_mask,
+    combine_predictions_from_inference,
+    combine_predictions_for_web_mapping,
+    create_leaflet_config,
 )
-from app.models.architectures import ConvNeXtUNet  # , SettleNet
+from app.models.architectures import ConvNeXtUNet, SettleNet
 
 # --- USER CONFIGURATION ---
 # Change these values to test different models and data modalities.
@@ -34,6 +41,16 @@ APP_CONFIG = {
 
 # --- SETUP ---
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 config = setup_config(APP_CONFIG["MODALITY_TO_RUN"])
 device = torch.device("cpu")
 
@@ -55,8 +72,8 @@ def load_inference_model():
     # Select model architecture
     if APP_CONFIG["MODEL_NAME"] == "ConvNeXtUNet":
         model = ConvNeXtUNet(config)
-    # elif APP_CONFIG["MODEL_NAME"] == "SettleNet":
-    #     model = SettleNet(config)
+    elif APP_CONFIG["MODEL_NAME"] == "SettleNet":
+        model = SettleNet(config)
     else:
         raise ValueError(f"Model name '{APP_CONFIG['MODEL_NAME']}' not recognized.")
 
@@ -72,6 +89,223 @@ def load_inference_model():
 model = load_inference_model()
 test_file_ids = get_test_file_ids(config)
 
+# Global variable to store benchmark results for API access
+all_benchmarks = []
+
+
+# --- DYNAMIC MODEL LOADING ---
+def load_model_by_type(model_type: str):
+    """Load a model based on the frontend model type selection."""
+    model_config = get_model_config(model_type)
+    modality = model_config["modality"]
+    model_name = model_config["model_name"]
+    model_file = model_config["model_file"]
+
+    # Setup configuration for the specific modality
+    config = setup_config(modality)
+
+    # Load the model
+    model_path = Path("./trained_models") / model_file
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+
+    if model_name == "ConvNeXtUNet":
+        model = ConvNeXtUNet(config)
+    elif model_name == "SettleNet":
+        model = SettleNet(config)
+    else:
+        raise ValueError(f"Model name '{model_name}' not recognized.")
+
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
+    model.eval()
+
+    print(
+        f"Successfully loaded {model_name} model ({modality} modality) from {model_file}"
+    )
+    return model, config
+
+
+# --- UPLOAD AND INFERENCE ENDPOINT ---
+@app.post("/upload")
+async def upload_and_analyze(
+    file: UploadFile = File(...),
+    model_type: str = Form(...),
+    modality: str = Form(...),
+    threshold: float = Form(0.7),
+):
+    """
+    Handle file upload and run inference with the selected model.
+    Expected file: ZIP containing satellite-256, bc-256, bh-256 folders with matching tile names.
+    """
+    try:
+        # Load the appropriate model
+        model, config = load_model_by_type(model_type)
+
+        # Create temporary directory for processing
+        temp_dir = Path(tempfile.mkdtemp())
+
+        try:
+            # Save uploaded file
+            if not file.filename:
+                return JSONResponse(
+                    status_code=400, content={"error": "No filename provided"}
+                )
+
+            file_path = temp_dir / file.filename
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # Extract ZIP file
+            if file.filename.lower().endswith(".zip"):
+                with zipfile.ZipFile(file_path, "r") as zip_ref:
+                    zip_ref.extractall(temp_dir / "extracted")
+                data_dir = temp_dir / "extracted"
+            else:
+                return JSONResponse(
+                    status_code=400, content={"error": "Only ZIP files are supported"}
+                )
+
+            # Find the tile directories
+            tile_dirs = {
+                "satellite": data_dir / "satellite-256",
+                "bc": data_dir / "bc-256",
+                "bh": data_dir / "bh-256",
+            }
+
+            # Verify required directories exist based on modality
+            required_dirs = []
+            if config.MODALITY_TO_RUN in ["satellite", "bc+sat", "all"]:
+                required_dirs.append("satellite")
+            if config.MODALITY_TO_RUN in ["bc", "bc+sat", "all"]:
+                required_dirs.append("bc")
+            if config.MODALITY_TO_RUN in ["bh", "all"]:
+                required_dirs.append("bh")
+
+            for dir_name in required_dirs:
+                if not tile_dirs[dir_name].exists():
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": f"Required directory {dir_name}-256 not found in ZIP"
+                        },
+                    )
+
+            # Get list of tile files (assuming they all have matching names)
+            satellite_files = []
+            if tile_dirs["satellite"].exists():
+                satellite_files = list(tile_dirs["satellite"].glob("*.tif"))
+
+            if not satellite_files:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "No .tif files found in satellite-256 directory"},
+                )
+
+            # Extract file IDs (filenames without extension)
+            file_ids = [f.stem for f in satellite_files]
+
+            # Temporarily update the config data root to point to our extracted data
+            original_data_root = config.DATA_ROOT
+            config.DATA_ROOT = data_dir
+
+            # Run inference on all tiles
+            prediction_masks = []
+
+            print(
+                f"Running inference on {len(file_ids)} tiles with {model_type} model..."
+            )
+
+            for file_id in tqdm(file_ids, desc="Processing tiles"):
+                try:
+                    image_tensor, _ = load_and_preprocess_image(file_id, config)
+                    image_tensor = image_tensor.unsqueeze(0).to(device)
+
+                    with torch.no_grad():
+                        logits = model(image_tensor)
+                        pred_mask_np = (
+                            (torch.sigmoid(logits) > threshold)
+                            .squeeze()
+                            .cpu()
+                            .numpy()
+                            .astype(np.uint8)
+                        )
+
+                    prediction_masks.append(pred_mask_np)
+
+                except Exception as e:
+                    print(f"Error processing tile {file_id}: {str(e)}")
+                    continue
+
+            if not prediction_masks:
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": "No tiles were successfully processed"},
+                )
+
+            # Restore original data root
+            config.DATA_ROOT = original_data_root
+
+            # Generate unique filename for this inference
+            timestamp = int(time.time())
+            output_filename = (
+                f"predictions_{model_type}_{len(file_ids)}files_{timestamp}.tif"
+            )
+
+            # Combine predictions into web-mapping ready format
+            web_metadata = combine_predictions_for_web_mapping(
+                prediction_masks=prediction_masks,
+                file_ids=file_ids[
+                    : len(prediction_masks)
+                ],  # Match the successful predictions
+                config=config,
+                output_dir=str(static_dir),
+                filename=output_filename,
+            )
+
+            # Create leaflet configuration - use PNG file for web display
+            png_filename = output_filename.replace(".tif", ".png")
+            png_url = f"/static/{png_filename}"
+            leaflet_config = create_leaflet_config(web_metadata, png_url)
+
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": f"Successfully processed {len(prediction_masks)} tiles",
+                    "leaflet_config": leaflet_config,
+                    "metadata": {
+                        "model_type": model_type,
+                        "modality": config.MODALITY_TO_RUN,
+                        "threshold": threshold,
+                        "tiles_processed": len(prediction_masks),
+                        "output_file": output_filename,
+                    },
+                }
+            )
+
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    except Exception as e:
+        print(f"Error in upload_and_analyze: {str(e)}")
+        return JSONResponse(
+            status_code=500, content={"error": f"Processing failed: {str(e)}"}
+        )
+
+
+# --- PROTOTYPE FRONTEND ---
+@app.get("/prototype", response_class=HTMLResponse)
+async def serve_prototype():
+    """Serve the prototype frontend."""
+    try:
+        with open("prototype-v3.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Prototype file not found</h1>", status_code=404
+        )
+
 
 # --- API ENDPOINT ---
 @app.get("/", response_class=HTMLResponse)
@@ -79,7 +313,8 @@ async def run_inference_and_show_report(request: Request):
     if not test_file_ids:
         return "<h2>Error: No test files found.</h2><p>Please ensure your `data/qc/satellite-256` directory is populated with .tif files.</p>"
 
-    all_benchmarks = []
+    global all_benchmarks
+    all_benchmarks.clear()  # Clear previous results
     visual_results = []
 
     for num_files in APP_CONFIG["BENCHMARKS"]:
@@ -90,6 +325,7 @@ async def run_inference_and_show_report(request: Request):
             continue
 
         subset_ids = test_file_ids[:num_files]
+        prediction_masks = []  # Store all prediction masks for this benchmark
 
         start_time = time.time()
         print(f"\n🚀 Running inference on {num_files} files...")
@@ -110,6 +346,9 @@ async def run_inference_and_show_report(request: Request):
                     .numpy()
                     .astype(np.uint8)
                 )
+
+            # Store prediction mask for combining later
+            prediction_masks.append(pred_mask_np)
 
             # For the first benchmark, save images for visualization
             if num_files == APP_CONFIG["BENCHMARKS"][0]:
@@ -135,17 +374,32 @@ async def run_inference_and_show_report(request: Request):
 
                 visual_results.append(result_paths)
 
+        # Combine all prediction masks into a web-mapping ready TIFF file
+        web_metadata = combine_predictions_for_web_mapping(
+            prediction_masks=prediction_masks,
+            file_ids=subset_ids,
+            config=config,
+            output_dir=str(static_dir),
+            filename=f"web_predictions_{num_files}_files.tif",
+        )
+        combined_tiff_path = web_metadata["file_path"]
+
         end_time = time.time()
         total_time = end_time - start_time
 
         print(f"✅ Completed {num_files} files in {total_time:.4f} seconds")
         print(f"📊 Average time per file: {total_time/num_files:.4f} seconds")
+        print(f"💾 Combined predictions saved to: {combined_tiff_path}")
 
         all_benchmarks.append(
             {
                 "num_files": num_files,
                 "total_time": total_time,
                 "avg_time": total_time / num_files,
+                "combined_tiff": Path(
+                    combined_tiff_path
+                ).name,  # Store just the filename for the template
+                "web_metadata": web_metadata,  # Include full metadata for potential frontend use
             }
         )
 
@@ -163,4 +417,69 @@ async def run_inference_and_show_report(request: Request):
             "benchmarks": all_benchmarks,
             "results": visual_results,
         },
+    )
+
+
+@app.get("/api/predictions/metadata/{num_files}")
+async def get_predictions_metadata(num_files: int):
+    """
+    API endpoint to get metadata for web mapping integration.
+    Returns Leaflet-compatible configuration for the predictions.
+    """
+    if num_files not in APP_CONFIG["BENCHMARKS"]:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No benchmark found for {num_files} files"},
+        )
+
+    # Find the corresponding benchmark data
+    benchmark_data = None
+    for benchmark in all_benchmarks:
+        if benchmark["num_files"] == num_files:
+            benchmark_data = benchmark
+            break
+
+    if not benchmark_data or "web_metadata" not in benchmark_data:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No web metadata found for {num_files} files"},
+        )
+
+    # Create Leaflet configuration
+    tiff_filename = benchmark_data["combined_tiff"]
+    tiff_url = f"/static/{tiff_filename}"
+
+    leaflet_config = create_leaflet_config(benchmark_data["web_metadata"], tiff_url)
+
+    return JSONResponse(content=leaflet_config)
+
+
+@app.get("/api/predictions/list")
+async def list_available_predictions():
+    """
+    API endpoint to list all available prediction datasets.
+    """
+    predictions_list = []
+
+    for benchmark in all_benchmarks:
+        if "web_metadata" in benchmark:
+            predictions_list.append(
+                {
+                    "num_files": benchmark["num_files"],
+                    "filename": benchmark["combined_tiff"],
+                    "processing_time": benchmark["total_time"],
+                    "bounds": benchmark["web_metadata"]["bounds"],
+                    "tile_count": benchmark["web_metadata"]["num_tiles"],
+                }
+            )
+
+    return JSONResponse(
+        content={
+            "available_predictions": predictions_list,
+            "model_info": {
+                "name": APP_CONFIG["MODEL_NAME"],
+                "modality": APP_CONFIG["MODALITY_TO_RUN"],
+                "filename": APP_CONFIG["MODEL_FILENAME"],
+            },
+        }
     )

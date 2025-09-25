@@ -4,6 +4,31 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 
+# Model mapping configuration
+MODEL_MAPPING = {
+    "convnext_all": {
+        "model_name": "ConvNeXtUNet",
+        "model_file": "convnext-all-7ir38hd4.pth",
+        "modality": "all",
+    },
+    "convnext_bc": {
+        "model_name": "ConvNeXtUNet",
+        "model_file": "convnext-bc-g00wx4xl.pth",
+        "modality": "bc",
+    },
+    "convnext_satellite": {
+        "model_name": "ConvNeXtUNet",
+        "model_file": "convnext-sat-xqkdckas.pth",
+        "modality": "satellite",
+    },
+    "settlenet": {
+        "model_name": "SettleNet",
+        "model_file": "settlenet-rxrj9b9b.pth",
+        "modality": "all",
+    },
+}
+
+
 @dataclass
 class Config:
     """
@@ -42,6 +67,16 @@ class Config:
     INPUT_CHANNELS: int = 0
     CURRENT_MEAN: list[float] = field(default_factory=list)
     CURRENT_STD: list[float] = field(default_factory=list)
+
+
+def get_model_config(model_type: str) -> dict:
+    """Get model configuration based on frontend model selection."""
+    if model_type not in MODEL_MAPPING:
+        raise ValueError(
+            f"Unknown model type: {model_type}. Available types: {list(MODEL_MAPPING.keys())}"
+        )
+
+    return MODEL_MAPPING[model_type]
 
 
 def setup_config(modality: str) -> Config:
