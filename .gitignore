@@ -1,4 +1,5 @@
-app/static/
+/app/static/*.tif
+/app/static/*.png
 data/
 trained_models/
 test_output/
