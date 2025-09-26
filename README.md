@@ -1,85 +1,153 @@
 # SettleNet Prototype Inference
 
-A streamlined FastAPI backend paired with a single-page prototype (`prototype-v3.html`) that lets you upload tiled imagery, run the selected model, and visualize the merged prediction mask in Leaflet.
+FastAPI backend plus a single-page Leaflet prototype that accepts tiled imagery, runs a selected PyTorch checkpoint, and renders the merged prediction mask in the browser.
 
-## Project Structure
+## At a Glance
+
+- **Backend**: `FastAPI` app with `/prototype`, `/upload`, and `/progress/{job_id}` endpoints
+- **Frontend**: `prototype-v3.html` served by the backend; handles uploads and polls progress
+- **Models**: Drop `.pth` checkpoints into `trained_models/` and wire them via `MODEL_MAPPING`
+- **Outputs**: Combined GeoTIFF + PNG overlays written to `app/static/` for immediate Leaflet use
 
 ```
 settlenet/
 ├── app/
-│   ├── main.py            # FastAPI application exposing /prototype and /upload
-│   ├── static/            # Runtime artefacts generated for the Leaflet map
+│   ├── main.py            # FastAPI application & progress tracking
 │   ├── models/
-│   │   ├── components.py  # Shared ConvNeXt / SettleNet building blocks
+│   │   ├── components.py  # Shared ConvNeXt / SettleNet blocks
 │   │   └── architectures.py
+│   ├── static/            # Runtime artefacts served back to the frontend
 │   └── utils/
 │       ├── config.py      # Model registry & modality setup
 │       └── data_processing.py
-├── trained_models/        # Drop .pth checkpoints here
-├── prototype-v3.html      # Frontend served at /prototype
+├── prototype-v3.html      # Leaflet prototype fetched from /prototype
 ├── requirements.txt
+├── trained_models/        # Place model checkpoints here
 └── README.md
 ```
 
-## Getting Started
+## Requirements
 
-1. **Install dependencies**
+- Python 3.10+
+- GDAL-compatible dependencies used by `rasterio`
+- Optional: `pyproj` for reprojection to EPSG:3857 (Leaflet friendly)
 
-    ```bash
-    pip install -r requirements.txt
+Install Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Setup Checklist
+
+1. **Model weights** – copy the desired `.pth` files into `trained_models/`.
+     - Supported keys live in `app/utils/config.py` under `MODEL_MAPPING` (e.g. `settlenet`, `convnext_all`).
+     - Frontend dropdown values must match these keys exactly.
+
+2. **Prepare upload ZIP** – create a ZIP containing the modality folders required by the chosen model:
+
+     ```
+     your_tiles.zip
+     ├── satellite-256/
+     │   ├── qc_100_48.tif
+     │   └── ...
+     ├── bc-256/
+     │   └── qc_100_48.tif
+     └── bh-256/
+                └── qc_100_48.tif
+     ```
+
+     The backend validates only the folders needed for the selected modality (satellite, bc, bh).
+
+3. **Run the server**
+
+     ```bash
+     uvicorn app.main:app --reload
+     ```
+
+4. **Open the prototype** – visit [http://localhost:8000/prototype](http://localhost:8000/prototype), choose a model, upload your ZIP, and click **Analyse**. The UI shows real-time progress as the backend processes each tile.
+
+## Request Flow
+
+1. **Frontend upload** – the browser posts the ZIP and selected model to `/upload`.
+2. **Job creation** – the backend saves the archive, returns a `job_id`, and runs inference asynchronously.
+3. **Progress polling** – the frontend polls `/progress/{job_id}` once per second and updates the progress bar.
+4. **Completion** – when the job finishes, the progress endpoint embeds the Leaflet configuration. The frontend renders the merged prediction overlay and announces completion.
+
+### API Reference
+
+#### `POST /upload`
+
+- **Body**: multipart form containing `file`, `model_type`, optional `threshold` (default 0.7)
+- **Response**: `{ "job_id": "..." }`
+
+> The endpoint always returns quickly; inference happens in a background task.
+
+#### `GET /progress/{job_id}`
+
+- **Response** (during processing):
+
+    ```json
+    {
+        "job_id": "...",
+        "status": "processing",
+        "progress": 0.42,
+        "tiles_total": 12,
+        "tiles_processed": 5,
+        "message": "Processed 5/12 tiles"
+    }
     ```
 
-2. **Place model weights**
+- **Response** (on completion):
 
-    Copy the desired `.pth` file(s) into `trained_models/`. Supported options are defined in `app/utils/config.py` (`MODEL_MAPPING`). The prototype dropdown keys (`settlenet`, `convnext_all`, etc.) must match the mapping entries.
-
-3. **Prepare your upload**
-
-    Create a ZIP archive with modality folders that match the selected model:
-
-    ```
-    your_tiles.zip
-    ├── satellite-256/
-    │   ├── qc_100_48.tif
-    │   └── ...
-    ├── bc-256/
-    │   └── qc_100_48.tif
-    └── bh-256/
-         └── qc_100_48.tif
-    ```
-
-    Only the folders required for the chosen modality are validated.
-
-4. **Run the server**
-
-    ```bash
-    uvicorn app.main:app --reload
+    ```json
+    {
+        "job_id": "...",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+            "success": true,
+            "leaflet_config": {
+                "tiff_url": "/static/predictions_settlenet_12tiles_1700000000.tif",
+                "bounds": {"south": 14.6, "west": 121.0, "north": 14.7, "east": 121.1},
+                "zoom_levels": {"min": 10, "max": 18, "initial": 13},
+                ...
+            },
+            "metadata": {"model_type": "settlenet", "tiles_processed": 12, ...}
+        }
+    }
     ```
 
-5. **Open the prototype**
+#### `GET /prototype`
 
-    Visit [http://localhost:8000/prototype](http://localhost:8000/prototype), pick a model, upload the ZIP, and click **Analyse**. The backend streams results to `app/static/` and returns Leaflet-ready metadata that the frontend renders immediately.
+Serves `prototype-v3.html`.
 
-## How It Works
+#### `GET /static/{filename}`
 
-- `/prototype` serves the bundled HTML frontend.
-- `/upload` accepts a ZIP, determines the required modality from the selected model, loads the matching PyTorch checkpoint on CPU, runs inference per tile, merges predictions geospatially (EPSG:3857 by default), and returns a config payload for Leaflet.
-- Combined GeoTIFF + PNG overlays are written to `app/static/` so the browser can fetch them directly.
+Exposes generated GeoTIFF/PNG overlays.
 
-## Configuration Notes
+## Output Artefacts
 
-- Extend or adjust model options via `MODEL_MAPPING` in `app/utils/config.py`.
-- Normalisation statistics live in the same file; update them if you trained with different preprocessing.
-- The system currently runs inference on CPU. Switch `device` in `app/main.py` if GPU execution is needed.
+- Combined GeoTIFF (`*.tif`) and PNG previews (`*.png`) are placed in `app/static/` by default.
+- Filenames include the selected model type, tile count, and timestamp for traceability.
+- Existing artefacts remain until manually deleted—clear the directory periodically if disk space is a concern.
+
+## Configuration & Customisation
+
+- **Model registry** – update `MODEL_MAPPING` in `app/utils/config.py` to add or rename models.
+- **Normalisation stats** – adjust the RGB/BC/BH means and standard deviations if your training data differs.
+- **Device selection** – change `device = torch.device("cpu")` at the top of `app/main.py` if GPU inference is required.
+- **Leaflet defaults** – tweak initial bounds/zoom or UI styling inside `prototype-v3.html`.
 
 ## Troubleshooting
 
-- **Missing folders in ZIP** – the backend responds with actionable error messages indicating which modality folders were expected.
-- **Model not found** – confirm the `.pth` filename matches the entry in `MODEL_MAPPING`.
-- **pyproj missing** – install `pyproj` to enable reprojection to Web Mercator; without it, the original CRS is preserved.
+- **Zip validation errors** – ensure the uploaded archive contains the modality folders required by the chosen model.
+- **Missing checkpoint** – confirm the `.pth` filename matches the mapping entry.
+- **CRS reprojection issues** – install `pyproj`; without it, output stays in the source CRS.
+- **Stale static artefacts** – clear `app/static/` if you want to avoid serving outdated overlays.
 
-## Next Steps
+## Housekeeping
 
-- Add authentication or scoped CORS for production deployments.
-- Extend the frontend to preview individual tiles or additional overlays.
-- Wire in progress updates (e.g. WebSocket) if you expect very large batches.
+- The legacy benchmarking scripts (`run_inference.py`, `start_inference.py`) are no longer part of the supported workflow.
+- Keep dependencies lean—`requirements.txt` mirrors the modules imported in `app/`.
+- Consider adding authentication/CORS restrictions before exposing the prototype publicly.
