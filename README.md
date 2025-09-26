@@ -2,6 +2,14 @@
 
 FastAPI backend plus a single-page Leaflet prototype that accepts tiled imagery, runs a selected PyTorch checkpoint, and renders the merged prediction mask in the browser.
 
+## Swagger API Docs
+
+Check api and usage after running
+
+```
+http://localhost:8000/docs
+```
+
 ## At a Glance
 
 - **Backend**: `FastAPI` app with `/prototype`, `/upload`, and `/progress/{job_id}` endpoints
