@@ -1,6 +1,9 @@
+import asyncio
+import threading
 import time
+import uuid
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -38,6 +41,36 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 MODEL_CACHE: Dict[str, torch.nn.Module] = {}
+MODEL_CACHE_LOCK = threading.Lock()
+
+PROGRESS_REGISTRY: Dict[str, Dict[str, Any]] = {}
+PROGRESS_REGISTRY_LOCK = threading.Lock()
+
+
+def initialize_progress(job_id: str) -> None:
+    with PROGRESS_REGISTRY_LOCK:
+        PROGRESS_REGISTRY[job_id] = {
+            "job_id": job_id,
+            "status": "pending",
+            "progress": 0.0,
+            "message": "Queued",
+            "tiles_total": 0,
+            "tiles_processed": 0,
+            "result": None,
+            "error": None,
+        }
+
+
+def update_progress(job_id: str, **updates: Any) -> None:
+    with PROGRESS_REGISTRY_LOCK:
+        if job_id not in PROGRESS_REGISTRY:
+            PROGRESS_REGISTRY[job_id] = {"job_id": job_id}
+        PROGRESS_REGISTRY[job_id].update(updates)
+
+
+def get_progress(job_id: str) -> Dict[str, Any]:
+    with PROGRESS_REGISTRY_LOCK:
+        return PROGRESS_REGISTRY.get(job_id, {}).copy()
 
 
 def load_model_by_type(model_type: str) -> Tuple[torch.nn.Module, "Config"]:
@@ -47,32 +80,190 @@ def load_model_by_type(model_type: str) -> Tuple[torch.nn.Module, "Config"]:
     model_name = model_config["model_name"]
     model_file = model_config["model_file"]
 
-    model = MODEL_CACHE.get(model_type)
-    if model is None:
-        model_path = Path("./trained_models") / model_file
-        if not model_path.exists():
-            raise FileNotFoundError(
-                f"Model file not found at {model_path}. Place it in 'trained_models/'."
-            )
+    with MODEL_CACHE_LOCK:
+        model = MODEL_CACHE.get(model_type)
+        if model is None:
+            model_path = Path("./trained_models") / model_file
+            if not model_path.exists():
+                raise FileNotFoundError(
+                    f"Model file not found at {model_path}. Place it in 'trained_models/'."
+                )
 
-        config_for_shape = setup_config(modality)
+            config_for_shape = setup_config(modality)
 
-        if model_name == "ConvNeXtUNet":
-            model = ConvNeXtUNet(config_for_shape)
-        elif model_name == "SettleNet":
-            model = SettleNet(config_for_shape)
-        else:
-            raise ValueError(f"Model name '{model_name}' not recognized.")
+            if model_name == "ConvNeXtUNet":
+                model = ConvNeXtUNet(config_for_shape)
+            elif model_name == "SettleNet":
+                model = SettleNet(config_for_shape)
+            else:
+                raise ValueError(f"Model name '{model_name}' not recognized.")
 
-        state_dict = torch.load(model_path, map_location=device)
-        model.load_state_dict(state_dict)
-        model.to(device)
-        model.eval()
-        MODEL_CACHE[model_type] = model
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            model.eval()
+            MODEL_CACHE[model_type] = model
+
+        cached_model = MODEL_CACHE[model_type]
 
     # Always create a fresh config so request-specific changes don't leak
     config = setup_config(modality)
-    return model, config
+    return cached_model, config
+
+
+async def run_job(
+    job_id: str, job_dir: Path, uploaded_path: Path, model_type: str, threshold: float
+) -> None:
+    try:
+        await asyncio.to_thread(
+            process_upload_job,
+            job_id,
+            job_dir,
+            uploaded_path,
+            model_type,
+            threshold,
+        )
+    finally:
+        shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def process_upload_job(
+    job_id: str,
+    job_dir: Path,
+    uploaded_path: Path,
+    model_type: str,
+    threshold: float,
+) -> None:
+    try:
+        update_progress(
+            job_id, status="processing", message="Loading model", progress=0.05
+        )
+        model, config = load_model_by_type(model_type)
+
+        if not uploaded_path.name.lower().endswith(".zip"):
+            raise ValueError("Only ZIP files are supported")
+
+        extracted_dir = job_dir / "extracted"
+        update_progress(job_id, message="Extracting archive", progress=0.1)
+        with zipfile.ZipFile(uploaded_path, "r") as zip_ref:
+            zip_ref.extractall(extracted_dir)
+
+        tile_dirs = {
+            "satellite": extracted_dir / "satellite-256",
+            "bc": extracted_dir / "bc-256",
+            "bh": extracted_dir / "bh-256",
+        }
+
+        required_dirs: List[str] = []
+        if config.MODALITY_TO_RUN in ["satellite", "bc+sat", "all"]:
+            required_dirs.append("satellite")
+        if config.MODALITY_TO_RUN in ["bc", "bc+sat", "all"]:
+            required_dirs.append("bc")
+        if config.MODALITY_TO_RUN in ["bh", "all"]:
+            required_dirs.append("bh")
+
+        missing = [d for d in required_dirs if not tile_dirs[d].exists()]
+        if missing:
+            missing_dirs = ", ".join(f"{name}-256" for name in missing)
+            raise ValueError(f"Required directories missing from ZIP: {missing_dirs}")
+
+        satellite_files = list(tile_dirs["satellite"].glob("*.tif"))
+        if not satellite_files:
+            raise ValueError("No .tif files found in satellite-256 directory")
+
+        file_ids = [f.stem for f in satellite_files]
+        total_tiles = len(file_ids)
+        update_progress(
+            job_id,
+            message=f"Processing {total_tiles} tiles",
+            tiles_total=total_tiles,
+            tiles_processed=0,
+            progress=0.15,
+        )
+
+        prediction_masks: List[np.ndarray] = []
+        original_data_root = config.DATA_ROOT
+        config.DATA_ROOT = extracted_dir
+
+        for index, file_id in enumerate(file_ids, start=1):
+            try:
+                image_tensor, _ = load_and_preprocess_image(file_id, config)
+                image_tensor = image_tensor.unsqueeze(0).to(device)
+
+                with torch.no_grad():
+                    logits = model(image_tensor)
+                    pred_mask_np = (
+                        (torch.sigmoid(logits) > threshold)
+                        .squeeze()
+                        .cpu()
+                        .numpy()
+                        .astype(np.uint8)
+                    )
+
+                prediction_masks.append(pred_mask_np)
+            except Exception as exc:  # noqa: BLE001
+                print(f"Error processing tile {file_id}: {exc}")
+
+            progress_value = 0.15 + (0.7 * index / total_tiles)
+            update_progress(
+                job_id,
+                tiles_processed=index,
+                progress=min(progress_value, 0.9),
+                message=f"Processed {index}/{total_tiles} tiles",
+            )
+
+        config.DATA_ROOT = original_data_root
+
+        if not prediction_masks:
+            raise RuntimeError("No tiles were successfully processed")
+
+        update_progress(job_id, message="Merging predictions", progress=0.92)
+        timestamp = int(time.time())
+        output_filename = (
+            f"predictions_{model_type}_{len(prediction_masks)}tiles_{timestamp}.tif"
+        )
+
+        web_metadata = combine_predictions_for_web_mapping(
+            prediction_masks=prediction_masks,
+            file_ids=file_ids[: len(prediction_masks)],
+            config=config,
+            output_dir=str(static_dir),
+            filename=output_filename,
+        )
+
+        png_filename = output_filename.replace(".tif", ".png")
+        png_url = f"/static/{png_filename}"
+        leaflet_config = create_leaflet_config(web_metadata, png_url)
+
+        result_payload = {
+            "success": True,
+            "message": f"Processed {len(prediction_masks)} tiles",
+            "leaflet_config": leaflet_config,
+            "metadata": {
+                "model_type": model_type,
+                "modality": config.MODALITY_TO_RUN,
+                "threshold": threshold,
+                "tiles_processed": len(prediction_masks),
+                "output_file": output_filename,
+            },
+        }
+
+        update_progress(
+            job_id,
+            status="completed",
+            progress=1.0,
+            message="Processing complete",
+            result=result_payload,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error_message = str(exc)
+        update_progress(
+            job_id,
+            status="failed",
+            progress=1.0,
+            message=f"Failed: {error_message}",
+            error=error_message,
+        )
 
 
 @app.post("/upload")
@@ -83,134 +274,60 @@ async def upload_and_analyze(
     modality: str = Form(""),  # legacy field retained for backward compatibility
 ):
     """
-    Handle file upload and run inference with the selected model.
+    Handle file upload and kick off asynchronous inference with the selected model.
     Expected file: ZIP containing satellite-256, bc-256, bh-256 folders with matching tile names.
     """
+    if not file.filename:
+        return JSONResponse(status_code=400, content={"error": "No filename provided"})
+
+    job_id = uuid.uuid4().hex
+    initialize_progress(job_id)
+    update_progress(job_id, message="Uploading file", status="pending")
+
     try:
-        model, config = load_model_by_type(model_type)
-
-        with tempfile.TemporaryDirectory() as temp_dir_name:
-            temp_dir = Path(temp_dir_name)
-
-            if not file.filename:
-                return JSONResponse(
-                    status_code=400, content={"error": "No filename provided"}
-                )
-
-            file_path = temp_dir / file.filename
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
-            if not file.filename.lower().endswith(".zip"):
-                return JSONResponse(
-                    status_code=400, content={"error": "Only ZIP files are supported"}
-                )
-
-            extracted_dir = temp_dir / "extracted"
-            with zipfile.ZipFile(file_path, "r") as zip_ref:
-                zip_ref.extractall(extracted_dir)
-
-            tile_dirs = {
-                "satellite": extracted_dir / "satellite-256",
-                "bc": extracted_dir / "bc-256",
-                "bh": extracted_dir / "bh-256",
-            }
-
-            required_dirs = []
-            if config.MODALITY_TO_RUN in ["satellite", "bc+sat", "all"]:
-                required_dirs.append("satellite")
-            if config.MODALITY_TO_RUN in ["bc", "bc+sat", "all"]:
-                required_dirs.append("bc")
-            if config.MODALITY_TO_RUN in ["bh", "all"]:
-                required_dirs.append("bh")
-
-            missing = [d for d in required_dirs if not tile_dirs[d].exists()]
-            if missing:
-                missing_dirs = ", ".join(f"{name}-256" for name in missing)
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": f"Required directories missing from ZIP: {missing_dirs}"
-                    },
-                )
-
-            satellite_files = list(tile_dirs["satellite"].glob("*.tif"))
-            if not satellite_files:
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": "No .tif files found in satellite-256 directory"},
-                )
-
-            file_ids = [f.stem for f in satellite_files]
-
-            prediction_masks = []
-            original_data_root = config.DATA_ROOT
-            config.DATA_ROOT = extracted_dir
-
-            for file_id in file_ids:
-                try:
-                    image_tensor, _ = load_and_preprocess_image(file_id, config)
-                    image_tensor = image_tensor.unsqueeze(0).to(device)
-
-                    with torch.no_grad():
-                        logits = model(image_tensor)
-                        pred_mask_np = (
-                            (torch.sigmoid(logits) > threshold)
-                            .squeeze()
-                            .cpu()
-                            .numpy()
-                            .astype(np.uint8)
-                        )
-
-                    prediction_masks.append(pred_mask_np)
-                except Exception as exc:  # noqa: BLE001
-                    print(f"Error processing tile {file_id}: {exc}")
-
-            config.DATA_ROOT = original_data_root
-
-            if not prediction_masks:
-                return JSONResponse(
-                    status_code=500,
-                    content={"error": "No tiles were successfully processed"},
-                )
-
-            timestamp = int(time.time())
-            output_filename = (
-                f"predictions_{model_type}_{len(prediction_masks)}tiles_{timestamp}.tif"
-            )
-
-            web_metadata = combine_predictions_for_web_mapping(
-                prediction_masks=prediction_masks,
-                file_ids=file_ids[: len(prediction_masks)],
-                config=config,
-                output_dir=str(static_dir),
-                filename=output_filename,
-            )
-
-            png_filename = output_filename.replace(".tif", ".png")
-            png_url = f"/static/{png_filename}"
-            leaflet_config = create_leaflet_config(web_metadata, png_url)
-
-            return JSONResponse(
-                content={
-                    "success": True,
-                    "message": f"Processed {len(prediction_masks)} tiles",
-                    "leaflet_config": leaflet_config,
-                    "metadata": {
-                        "model_type": model_type,
-                        "modality": config.MODALITY_TO_RUN,
-                        "threshold": threshold,
-                        "tiles_processed": len(prediction_masks),
-                        "output_file": output_filename,
-                    },
-                }
-            )
-
-    except Exception as exc:  # noqa: BLE001
-        print(f"Error in upload_and_analyze: {exc}")
-        return JSONResponse(
-            status_code=500, content={"error": f"Processing failed: {exc}"}
+        threshold_value = float(threshold)
+    except (TypeError, ValueError):  # noqa: BLE001
+        update_progress(
+            job_id,
+            status="failed",
+            message="Invalid threshold value",
+            error="Invalid threshold",
         )
+        return JSONResponse(
+            status_code=400, content={"error": "Invalid threshold value"}
+        )
+
+    job_dir = Path(tempfile.mkdtemp(prefix=f"settlenet_{job_id}_"))
+    uploaded_path = job_dir / file.filename
+
+    try:
+        with open(uploaded_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as exc:  # noqa: BLE001
+        update_progress(
+            job_id, status="failed", message=f"Upload failed: {exc}", error=str(exc)
+        )
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return JSONResponse(
+            status_code=500, content={"error": f"Could not save upload: {exc}"}
+        )
+
+    update_progress(
+        job_id, status="processing", message="Queued for processing", progress=0.02
+    )
+    asyncio.create_task(
+        run_job(job_id, job_dir, uploaded_path, model_type, threshold_value)
+    )
+
+    return JSONResponse(content={"job_id": job_id})
+
+
+@app.get("/progress/{job_id}")
+async def get_job_progress(job_id: str):
+    record = get_progress(job_id)
+    if not record:
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    return JSONResponse(content=record)
 
 
 @app.get("/prototype", response_class=HTMLResponse)
