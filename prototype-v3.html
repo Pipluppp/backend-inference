@@ -400,7 +400,8 @@
             font-family: 'Roboto Mono', monospace;
             font-size: 13px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            max-width: 300px;
+            width: 280px;
+            max-width: 280px;
             color: var(--text-primary);
         }
 
@@ -506,6 +507,7 @@
             border-radius: 4px;
             min-height: 34px;
             transition: color 0.2s ease, background-color 0.2s ease;
+            overflow-wrap: anywhere;
         }
 
         .status-text.error {
@@ -540,7 +542,7 @@
 
         .progress-meta {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
             font-size: 11px;
             color: var(--text-secondary);
         }
@@ -766,14 +768,13 @@
 
                         <input id="file-input" type="file" accept=".tif,.tiff,.zip" />
                         <div id="status-container">
-                            <div id="status" class="status-text">Ready for analysis.</div>
+                            <div id="status" class="status-text">Ready.</div>
                             <div id="progress-indicator" class="progress-indicator">
                                 <div class="progress-bar">
                                     <div id="progress-bar-fill" class="progress-bar-fill"></div>
                                 </div>
                                 <div class="progress-meta">
                                     <span id="progress-message">Queued…</span>
-                                    <span id="progress-count"></span>
                                 </div>
                             </div>
                         </div>
@@ -895,7 +896,7 @@
                 var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
                 var baseLayers = { 'OSM': osm };
                 L.control.layers(baseLayers, null, { collapsed: true, position: 'topright' }).addTo(map);
-                try { document.getElementById('status').textContent = 'Google Maps API not available. Using OSM base.'; } catch (e) { }
+                try { document.getElementById('status').textContent = 'Google Maps unavailable. Using OSM.'; } catch (e) { }
             }
             L.control.zoom({ position: 'topright' }).addTo(map);
         }
@@ -918,7 +919,6 @@
         const progressIndicator = document.getElementById('progress-indicator');
         const progressBarFill = document.getElementById('progress-bar-fill');
         const progressMessage = document.getElementById('progress-message');
-        const progressCount = document.getElementById('progress-count');
 
         let activeJobId = null;
         let progressPollHandle = null;
@@ -933,7 +933,6 @@
             if (!progressBarFill) return;
             progressBarFill.style.width = '0%';
             progressMessage.textContent = 'Queued…';
-            progressCount.textContent = '';
         }
 
         function showProgressIndicator() {
@@ -964,15 +963,14 @@
         function updateProgressUI(data) {
             const ratio = Math.max(0, Math.min(1, data.progress ?? 0));
             progressBarFill.style.width = `${Math.round(ratio * 100)}%`;
-            if (data.message) {
+            const total = data.tiles_total ?? 0;
+            const processed = data.tiles_processed ?? 0;
+            if (total > 0) {
+                progressMessage.textContent = `Tiles ${processed}/${total}`;
+            } else if (data.message) {
                 progressMessage.textContent = data.message;
-                setStatus(data.message, false);
-            }
-            if (data.tiles_total) {
-                const processed = data.tiles_processed ?? 0;
-                progressCount.textContent = `${processed}/${data.tiles_total} tiles`;
             } else {
-                progressCount.textContent = '';
+                progressMessage.textContent = 'Processing…';
             }
         }
 
@@ -1001,10 +999,7 @@
                     stopProgressPolling();
                     try {
                         progressBarFill.style.width = '100%';
-                        progressMessage.textContent = 'Processing complete';
-                        if (data.tiles_total) {
-                            progressCount.textContent = `${data.tiles_total}/${data.tiles_total} tiles`;
-                        }
+                        progressMessage.textContent = 'Done';
                         handleInferenceResult(data.result);
                         hideProgressIndicator();
                         enableUploadButton();
@@ -1062,7 +1057,7 @@
             const metadata = payload.metadata || {};
             const processed = metadata.tiles_processed ?? 0;
             const modelName = metadata.model_type ?? modelSelect.value;
-            setStatus(`Analysis complete! Processed ${processed} tiles with ${modelName} model.`);
+            setStatus(`Done · ${processed} tiles (${modelName})`);
         }
 
         // NEW: Function to handle changes in the model selection
@@ -1112,7 +1107,7 @@
 
             if (!file) {
                 fileNameDisplay.textContent = 'No file chosen.';
-                setStatus('Ready for analysis.');
+                setStatus('Ready.');
                 resetProgressUI();
                 return;
             }
@@ -1120,7 +1115,7 @@
             fileNameDisplay.textContent = file.name;
             try {
                 await validateFile(file);
-                setStatus('File validated. Ready for analysis.');
+                setStatus('File ready.');
             } catch (error) {
                 setStatus('Error: ' + error.message, true);
                 this.value = '';
@@ -1181,7 +1176,7 @@
             }
 
             if (!fileInput.files || !fileInput.files[0]) {
-                setStatus('No file selected for analysis.', true);
+                setStatus('No file selected.', true);
                 return;
             }
 
@@ -1199,7 +1194,7 @@
                 };
                 const modality = modalityMap[modalityUI] || 'satellite';
 
-                setStatus('Uploading file...');
+                setStatus('Uploading…');
                 disableUploadButton();
                 hideProgressIndicator();
                 resetProgressUI();
@@ -1225,7 +1220,7 @@
                     throw new Error('Server did not return a job identifier.');
                 }
 
-                setStatus('Upload complete. Preparing inference...');
+                setStatus('Upload complete.');
                 startProgressPolling(responseData.job_id);
             } catch (error) {
                 console.error('Error:', error);
