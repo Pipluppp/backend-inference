@@ -169,10 +169,11 @@ export function bindHeroInteractions({ navLinks, navContainer, navHandle }) {
       }
     });
 
-    navLinksList?.addEventListener("mouseenter", openNav);
-    navLinksList?.addEventListener("mouseleave", scheduleCloseNav);
-    navContainer.addEventListener("mouseenter", clearNavCloseTimer);
-    navContainer.addEventListener("mouseleave", scheduleCloseNav);
+  navLinksList?.addEventListener("mouseenter", openNav);
+  navLinksList?.addEventListener("mouseleave", scheduleCloseNav);
+    navLinksList?.addEventListener("click", () => {
+      setExpanded(false);
+    });
 
     setExpanded(false);
   }

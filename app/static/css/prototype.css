@@ -48,6 +48,7 @@ body.scrolled .hero {
     display: flex;
     align-items: flex-start;
     gap: 12px;
+    pointer-events: none;
 }
 
 .floating-nav .nav-links {
@@ -101,6 +102,7 @@ body.scrolled .hero {
     font-size: 18px;
     line-height: 1;
     transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
 }
 
 .floating-nav .nav-handle:focus-visible {

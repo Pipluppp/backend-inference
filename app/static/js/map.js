@@ -64,7 +64,6 @@ async function createBaseLayers(map, onStatusUpdate) {
     position: "topright",
   }).addTo(map);
 
-  L.control.zoom({ position: "topright" }).addTo(map);
   return layerControl;
 }
 
