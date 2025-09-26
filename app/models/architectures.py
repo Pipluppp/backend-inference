@@ -181,6 +181,7 @@ class ConvNeXtUNet(nn.Module):
         features = self.encoder(x)
         return self.decoder(features)
 
+
 class SettleNet(nn.Module):
     """
     SettleNet architecture with three parallel 3-stage ConvNeXt encoders,
@@ -253,62 +254,6 @@ class SettleNet(nn.Module):
         }
 
         return self.decoder(decoder_features)
-
-
-# --- Define Fusion and Attention Blocks used by SettleNet ---
-class ChannelAttention(nn.Module):
-    def __init__(self, in_planes, ratio=16):
-        super().__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False),
-            nn.ReLU(),
-            nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False),
-        )
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        return x * self.sigmoid(
-            self.fc(self.avg_pool(x)) + self.fc(self.max_pool(x))
-        ).expand_as(x)
-
-
-class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
-        super().__init__()
-        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        return x * self.sigmoid(
-            self.conv1(torch.cat([torch.mean(x, 1, True), torch.max(x, 1, True)[0]], 1))
-        ).expand_as(x)
-
-
-class CBAM(nn.Module):
-    def __init__(self, in_planes):
-        super().__init__()
-        self.ca = ChannelAttention(in_planes)
-        self.sa = SpatialAttention()
-
-    def forward(self, x):
-        return self.sa(self.ca(x))
-
-
-class FusionBlock(nn.Module):
-    def __init__(self, in_channels_list, out_channels):
-        super().__init__()
-        total_in = sum(in_channels_list)
-        self.cbam = CBAM(total_in)
-        self.compress_conv = nn.Sequential(
-            nn.Conv2d(total_in, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True),
-        )
-
-    def forward(self, features):
-        return self.compress_conv(self.cbam(torch.cat(features, 1)))
 
 
 class ConvNeXtEncoder_3Stage(nn.Module):
