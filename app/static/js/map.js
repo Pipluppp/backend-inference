@@ -82,6 +82,14 @@ export function createMapController({
   map.createPane(RASTER_PANE);
   map.getPane(RASTER_PANE).style.zIndex = 650;
 
+  const defaultFlyPadding = L.point(48, 48);
+  const defaultFlyOptions = {
+    paddingTopLeft: defaultFlyPadding,
+    paddingBottomRight: defaultFlyPadding,
+    duration: 1.1,
+    easeLinearity: 0.25,
+  };
+
   const pendingOverlayRegistrations = [];
   let layerControl = null;
   createBaseLayers(map, onStatusUpdate)
@@ -262,13 +270,23 @@ export function createMapController({
       }
     },
 
-    fitToBounds(boundsObject) {
+    fitToBounds(boundsObject, options = {}) {
       if (!boundsObject && !currentBounds) return;
       const bounds = boundsObject
         ? [[boundsObject.south, boundsObject.west], [boundsObject.north, boundsObject.east]]
         : currentBounds;
       if (bounds) {
-        map.fitBounds(bounds);
+        const flyOptions = {
+          ...defaultFlyOptions,
+          ...(options.flyOptions ?? {}),
+        };
+
+        try {
+          map.flyToBounds(bounds, flyOptions);
+        } catch (error) {
+          console.warn("Smooth flyToBounds failed, falling back to fitBounds", error);
+          map.fitBounds(bounds, flyOptions);
+        }
       }
     },
 
