@@ -1,5 +1,5 @@
-# SettleNet Prototype Inference
-
+# SettleNet Prototype Inference CHANGE USER TEST
+ 
 FastAPI backend plus a single-page Leaflet prototype that accepts tiled imagery, runs a selected PyTorch checkpoint, and renders the merged prediction mask in the browser.
 
 ## Swagger API Docs
