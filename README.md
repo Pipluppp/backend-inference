@@ -1,4 +1,4 @@
-# SettleNet Prototype Inference
+# SettleNet Prototype Inference TESTING AGAIN
 
 FastAPI backend plus a single-page Leaflet prototype that accepts tiled imagery, runs a selected PyTorch checkpoint, and renders the merged prediction mask in the browser.
 
