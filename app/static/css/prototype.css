@@ -357,17 +357,57 @@ body.scrolled .hero {
     margin-top: 2rem;
     height: 80vh;
     min-height: 600px;
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+.analysis-map.is-comparison-view {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.analysis-map__wrapper {
+    position: relative;
+    height: 100%;
+    width: 100%;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    position: relative;
-    background-color: #f9f9f9;
     overflow: hidden;
-    display: grid;
+    background-color: #f9f9f9;
+}
+
+.analysis-map__wrapper.is-hidden {
+    display: none;
 }
 
 .analysis-map__canvas {
     width: 100%;
     height: 100%;
+}
+
+.map-label {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 500;
+    background: var(--panel-overlay);
+    backdrop-filter: blur(8px);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.map-label:not(.is-hidden) {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .analysis-map__panel {

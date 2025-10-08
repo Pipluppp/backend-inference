@@ -10,13 +10,60 @@ function selectElement(selector) {
   return element;
 }
 
-function handleInferenceResult({
-  result,
-  mapController,
-  ui,
-  toggles,
-  context,
-}) {
+// --- NEW STATE AND HELPER FUNCTIONS ---
+
+let mapControllerA = null;
+let mapControllerB = null;
+let mapAState = { model: null, label: null, modality: null };
+let mapBState = { model: null, label: null, modality: null };
+
+function updateMapLabel(labelId, modelLabel, modalityLabel) {
+  const labelEl = document.getElementById(labelId);
+  if (labelEl) {
+    labelEl.textContent = `${modelLabel} · ${modalityLabel}`;
+    labelEl.classList.remove('is-hidden');
+  }
+}
+
+// --- REFACTORED RESULT HANDLER ---
+
+function handleAnalysisResult({ result, context, ui, toggles }) {
+  const newModel = context.model;
+
+  let targetMapController;
+  let targetMapState;
+  let targetMapLabelId;
+
+  // Case 1: First analysis, or re-analyzing with the model already on map A
+  if (mapAState.model === null || mapAState.model === newModel) {
+    targetMapController = mapControllerA;
+    targetMapState = mapAState;
+    targetMapLabelId = "map-label-a";
+  }
+  // Case 2: A different model is chosen, triggering comparison view
+  else {
+    const mapSection = selectElement('#map-section');
+    const mapWrapperB = selectElement('#map-wrapper-b');
+
+    mapSection.classList.add('is-comparison-view');
+    mapWrapperB.classList.remove('is-hidden');
+
+    if (!mapControllerB) {
+      mapControllerB = createMapController({ containerId: 'leaflet-map-b' });
+    }
+
+    targetMapController = mapControllerB;
+    targetMapState = mapBState;
+    targetMapLabelId = "map-label-b";
+  }
+
+  // Update state and UI
+  targetMapState.model = newModel;
+  targetMapState.label = context.modelLabel;
+  targetMapState.modality = context.modalityLabel;
+  updateMapLabel(targetMapLabelId, context.modelLabel, context.modalityLabel);
+
+  // Render the result on the target map
   if (!result || !result.success) {
     const errorMessage = result?.error || "Analysis failed";
     ui.setStatus(`Error: ${errorMessage}`, { isError: true });
@@ -30,23 +77,24 @@ function handleInferenceResult({
   }
 
   try {
+    // Always clear old masks on the target map before rendering a new one
+    targetMapController.clearMask();
+
     const metadata = result.metadata ?? {};
     const processed = metadata.tiles_processed ?? 0;
-    const modelName = metadata.model_type ?? context.model;
-    const displayModelName = context.modelLabel ?? modelName;
+    const displayModelName = context.modelLabel ?? newModel;
     const inputLabel = context.fileName ?? metadata.input_file ?? "uploaded input";
     const overlayLabel = `${displayModelName} · ${inputLabel}`;
 
-    mapController.renderMask(leafletConfig, {
+    targetMapController.renderMask(leafletConfig, {
       opacity: context.opacity,
-      fit: true,
+      fit: true, // Let each map fit to its own bounds
       layerName: overlayLabel,
       metadata,
     });
-    mapController.fitToBounds(leafletConfig.bounds);
-
+    
     const activeMaskToggle = toggles.maskToggle?.checked ?? true;
-    mapController.toggleMask(activeMaskToggle);
+    targetMapController.toggleMask(activeMaskToggle);
     ui.setStatus(`Done · ${processed} tiles (${displayModelName})`);
   } catch (error) {
     console.error("Failed to render inference result", error);
@@ -72,8 +120,9 @@ function initialise() {
     fileNameDisplay,
   });
 
-  const mapController = createMapController({
-    containerId: "leaflet-map",
+  // Create the primary map controller
+  mapControllerA = createMapController({
+    containerId: "leaflet-map-a",
     onStatusUpdate: (message) => ui.setStatus(message),
   });
 
@@ -91,6 +140,23 @@ function initialise() {
     toggleMask: document.querySelector("#toggle-mask"),
   };
 
+  // Centralize map control listeners
+  elements.opacitySlider.addEventListener("input", () => {
+    const opacity = Number(elements.opacitySlider.value);
+    mapControllerA?.updateMaskOpacity(opacity);
+    mapControllerB?.updateMaskOpacity(opacity);
+  });
+  elements.toggleInput.addEventListener("change", () => {
+    const visible = elements.toggleInput.checked;
+    mapControllerA?.toggleInput(visible);
+    mapControllerB?.toggleInput(visible);
+  });
+  elements.toggleMask.addEventListener("change", () => {
+    const visible = elements.toggleMask.checked;
+    mapControllerA?.toggleMask(visible);
+    mapControllerB?.toggleMask(visible);
+  });
+
   bindHeroInteractions({
     navLinks: document.querySelectorAll(".nav-link"),
     navContainer: document.querySelector(".floating-nav"),
@@ -100,16 +166,15 @@ function initialise() {
   initializeUploadWorkflow({
     elements,
     ui,
-    mapController,
+    mapController: mapControllerA,
     onResult: (result, context) => {
-      handleInferenceResult({
+      handleAnalysisResult({
         result,
-        mapController,
+        context,
         ui,
         toggles: {
           maskToggle: elements.toggleMask,
         },
-        context,
       });
     },
     onError: (message) => {

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -88,7 +89,15 @@
                 </div>
 
                 <section id="map-section" class="analysis-map" aria-label="Upload GeoTIFF for analysis">
-                    <div id="leaflet-map" class="analysis-map__canvas"></div>
+                    <div id="map-wrapper-a" class="analysis-map__wrapper">
+                        <div id="leaflet-map-a" class="analysis-map__canvas"></div>
+                        <div id="map-label-a" class="map-label is-hidden"></div>
+                    </div>
+                    <div id="map-wrapper-b" class="analysis-map__wrapper is-hidden">
+                        <div id="leaflet-map-b" class="analysis-map__canvas"></div>
+                        <div id="map-label-b" class="map-label is-hidden"></div>
+                    </div>
+
                     <aside id="uipanel" class="analysis-map__panel">
                         <div class="panel__header">Upload GeoTIFF</div>
                         <label class="panel__label" for="model-select">Model</label>
