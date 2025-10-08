@@ -185,76 +185,77 @@ def process_upload_job(
         original_data_root = config.DATA_ROOT
         config.DATA_ROOT = extracted_dir
 
-        for index, file_id in enumerate(file_ids, start=1):
-            try:
-                image_tensor, _ = load_and_preprocess_image(file_id, config)
-                image_tensor = image_tensor.unsqueeze(0).to(device)
+        try:
+            for index, file_id in enumerate(file_ids, start=1):
+                try:
+                    image_tensor, _ = load_and_preprocess_image(file_id, config)
+                    image_tensor = image_tensor.unsqueeze(0).to(device)
 
-                with torch.no_grad():
-                    logits = model(image_tensor)
-                    pred_mask_np = (
-                        (torch.sigmoid(logits) > threshold)
-                        .squeeze()
-                        .cpu()
-                        .numpy()
-                        .astype(np.uint8)
-                    )
+                    with torch.no_grad():
+                        logits = model(image_tensor)
+                        pred_mask_np = (
+                            (torch.sigmoid(logits) > threshold)
+                            .squeeze()
+                            .cpu()
+                            .numpy()
+                            .astype(np.uint8)
+                        )
 
-                prediction_masks.append(pred_mask_np)
-            except Exception as exc:  # noqa: BLE001
-                print(f"Error processing tile {file_id}: {exc}")
+                    prediction_masks.append(pred_mask_np)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Error processing tile {file_id}: {exc}")
 
-            progress_value = 0.15 + (0.7 * index / total_tiles)
-            update_progress(
-                job_id,
-                tiles_processed=index,
-                progress=min(progress_value, 0.9),
-                message=f"Processed {index}/{total_tiles} tiles",
+                progress_value = 0.15 + (0.7 * index / total_tiles)
+                update_progress(
+                    job_id,
+                    tiles_processed=index,
+                    progress=min(progress_value, 0.9),
+                    message=f"Processed {index}/{total_tiles} tiles",
+                )
+
+            if not prediction_masks:
+                raise RuntimeError("No tiles were successfully processed")
+
+            update_progress(job_id, message="Merging predictions", progress=0.92)
+            timestamp = int(time.time())
+            output_filename = (
+                f"predictions_{model_type}_{len(prediction_masks)}tiles_{timestamp}.tif"
             )
 
-        config.DATA_ROOT = original_data_root
+            web_metadata = combine_predictions_for_web_mapping(
+                prediction_masks=prediction_masks,
+                file_ids=file_ids[: len(prediction_masks)],
+                config=config,
+                output_dir=str(static_dir),
+                filename=output_filename,
+            )
 
-        if not prediction_masks:
-            raise RuntimeError("No tiles were successfully processed")
+            png_filename = output_filename.replace(".tif", ".png")
+            png_url = f"/static/{png_filename}"
+            leaflet_config = create_leaflet_config(web_metadata, png_url)
 
-        update_progress(job_id, message="Merging predictions", progress=0.92)
-        timestamp = int(time.time())
-        output_filename = (
-            f"predictions_{model_type}_{len(prediction_masks)}tiles_{timestamp}.tif"
-        )
+            result_payload = {
+                "success": True,
+                "message": f"Processed {len(prediction_masks)} tiles",
+                "leaflet_config": leaflet_config,
+                "metadata": {
+                    "model_type": model_type,
+                    "modality": config.MODALITY_TO_RUN,
+                    "threshold": threshold,
+                    "tiles_processed": len(prediction_masks),
+                    "output_file": output_filename,
+                },
+            }
 
-        web_metadata = combine_predictions_for_web_mapping(
-            prediction_masks=prediction_masks,
-            file_ids=file_ids[: len(prediction_masks)],
-            config=config,
-            output_dir=str(static_dir),
-            filename=output_filename,
-        )
-
-        png_filename = output_filename.replace(".tif", ".png")
-        png_url = f"/static/{png_filename}"
-        leaflet_config = create_leaflet_config(web_metadata, png_url)
-
-        result_payload = {
-            "success": True,
-            "message": f"Processed {len(prediction_masks)} tiles",
-            "leaflet_config": leaflet_config,
-            "metadata": {
-                "model_type": model_type,
-                "modality": config.MODALITY_TO_RUN,
-                "threshold": threshold,
-                "tiles_processed": len(prediction_masks),
-                "output_file": output_filename,
-            },
-        }
-
-        update_progress(
-            job_id,
-            status="completed",
-            progress=1.0,
-            message="Processing complete",
-            result=result_payload,
-        )
+            update_progress(
+                job_id,
+                status="completed",
+                progress=1.0,
+                message="Processing complete",
+                result=result_payload,
+            )
+        finally:
+            config.DATA_ROOT = original_data_root
     except Exception as exc:  # noqa: BLE001
         error_message = str(exc)
         update_progress(
