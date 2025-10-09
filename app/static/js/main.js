@@ -2,6 +2,14 @@ import { createMapController } from "./map.js";
 import { bindHeroInteractions, createUIController, wireModelModalityBehavior } from "./ui.js";
 import { initializeUploadWorkflow } from "./upload.js";
 
+// --- Global state ---
+let mapControllers = [];
+const generatedOverlays = new Map(); // Key: overlayId, Value: { name, url, bounds, metadata }
+let nextOverlayId = 0;
+let isSyncing = false;
+let ui;
+// ---
+
 function selectElement(selector) {
   const element = document.querySelector(selector);
   if (!element) {
@@ -10,60 +18,11 @@ function selectElement(selector) {
   return element;
 }
 
-// --- NEW STATE AND HELPER FUNCTIONS ---
-
-let mapControllerA = null;
-let mapControllerB = null;
-let mapAState = { model: null, label: null, modality: null };
-let mapBState = { model: null, label: null, modality: null };
-
-function updateMapLabel(labelId, modelLabel, modalityLabel) {
-  const labelEl = document.getElementById(labelId);
-  if (labelEl) {
-    labelEl.textContent = `${modelLabel} · ${modalityLabel}`;
-    labelEl.classList.remove('is-hidden');
-  }
-}
-
-// --- REFACTORED RESULT HANDLER ---
-
-function handleAnalysisResult({ result, context, ui, toggles }) {
-  const newModel = context.model;
-
-  let targetMapController;
-  let targetMapState;
-  let targetMapLabelId;
-
-  // Case 1: First analysis, or re-analyzing with the model already on map A
-  if (mapAState.model === null || mapAState.model === newModel) {
-    targetMapController = mapControllerA;
-    targetMapState = mapAState;
-    targetMapLabelId = "map-label-a";
-  }
-  // Case 2: A different model is chosen, triggering comparison view
-  else {
-    const mapSection = selectElement('#map-section');
-    const mapWrapperB = selectElement('#map-wrapper-b');
-
-    mapSection.classList.add('is-comparison-view');
-    mapWrapperB.classList.remove('is-hidden');
-
-    if (!mapControllerB) {
-      mapControllerB = createMapController({ containerId: 'leaflet-map-b' });
-    }
-
-    targetMapController = mapControllerB;
-    targetMapState = mapBState;
-    targetMapLabelId = "map-label-b";
-  }
-
-  // Update state and UI
-  targetMapState.model = newModel;
-  targetMapState.label = context.modelLabel;
-  targetMapState.modality = context.modalityLabel;
-  updateMapLabel(targetMapLabelId, context.modelLabel, context.modalityLabel);
-
-  // Render the result on the target map
+function handleInferenceResult({
+  result,
+  toggles,
+  context,
+}) {
   if (!result || !result.success) {
     const errorMessage = result?.error || "Analysis failed";
     ui.setStatus(`Error: ${errorMessage}`, { isError: true });
@@ -77,24 +36,36 @@ function handleAnalysisResult({ result, context, ui, toggles }) {
   }
 
   try {
-    // Always clear old masks on the target map before rendering a new one
-    targetMapController.clearMask();
-
     const metadata = result.metadata ?? {};
     const processed = metadata.tiles_processed ?? 0;
-    const displayModelName = context.modelLabel ?? newModel;
+    const modelName = metadata.model_type ?? context.model;
+    const displayModelName = context.modelLabel ?? modelName;
     const inputLabel = context.fileName ?? metadata.input_file ?? "uploaded input";
     const overlayLabel = `${displayModelName} · ${inputLabel}`;
 
-    targetMapController.renderMask(leafletConfig, {
-      opacity: context.opacity,
-      fit: true, // Let each map fit to its own bounds
-      layerName: overlayLabel,
-      metadata,
+    const overlayId = `overlay-${nextOverlayId++}`;
+    const overlayConfig = {
+      id: overlayId,
+      name: overlayLabel,
+      url: leafletConfig.tiff_url,
+      bounds: [[leafletConfig.bounds.south, leafletConfig.bounds.west], [leafletConfig.bounds.north, leafletConfig.bounds.east]],
+      metadata: metadata,
+    };
+    generatedOverlays.set(overlayId, overlayConfig);
+
+    mapControllers.forEach((controller, index) => {
+      const newLayer = L.imageOverlay(overlayConfig.url, overlayConfig.bounds, {
+        opacity: context.opacity,
+        pane: "rasterPane",
+        interactive: false,
+      });
+      controller.addNamedOverlay(overlayConfig.name, newLayer, {
+        fit: index === 0, // Only fit bounds on the first map
+      });
     });
-    
+
     const activeMaskToggle = toggles.maskToggle?.checked ?? true;
-    targetMapController.toggleMask(activeMaskToggle);
+    mapControllers.forEach(c => c.toggleMask(activeMaskToggle));
     ui.setStatus(`Done · ${processed} tiles (${displayModelName})`);
   } catch (error) {
     console.error("Failed to render inference result", error);
@@ -102,6 +73,82 @@ function handleAnalysisResult({ result, context, ui, toggles }) {
     ui.setStatus(`Error: ${message}`, { isError: true });
   }
 }
+
+// --- Map Syncing Logic ---
+const syncHandler = function(e) {
+    if (isSyncing) return;
+    isSyncing = true;
+    
+    const sourceMap = e.target;
+    const center = sourceMap.getCenter();
+    const zoom = sourceMap.getZoom();
+
+    mapControllers.forEach(controller => {
+        if (controller.mapInstance !== sourceMap) {
+            controller.mapInstance.setView(center, zoom, { animate: false });
+        }
+    });
+
+    isSyncing = false;
+};
+
+function syncMaps() {
+    mapControllers.forEach(controller => {
+        controller.mapInstance.on('move zoom', syncHandler);
+    });
+}
+
+function unsyncMaps() {
+    mapControllers.forEach(controller => {
+        controller.mapInstance.off('move zoom', syncHandler);
+    });
+}
+// ---
+
+function updateMapLayout(count) {
+    const container = selectElement("#map-view-container");
+    container.innerHTML = '';
+    container.dataset.mapCount = count;
+    
+    unsyncMaps();
+    mapControllers.forEach(controller => controller.teardown());
+    mapControllers = [];
+
+    for (let i = 0; i < count; i++) {
+        const mapId = `map-instance-${i}`;
+        const mapDiv = document.createElement('div');
+        mapDiv.id = mapId;
+        mapDiv.className = 'map-instance';
+        container.appendChild(mapDiv);
+
+        const controller = createMapController({
+            containerId: mapId,
+            onStatusUpdate: (msg) => { if (i === 0 && ui) ui.setStatus(msg) },
+        });
+        mapControllers.push(controller);
+    }
+    
+    const opacitySlider = selectElement("#opacity");
+    generatedOverlays.forEach(overlayConfig => {
+        mapControllers.forEach(controller => {
+            const newLayer = L.imageOverlay(overlayConfig.url, overlayConfig.bounds, {
+                opacity: Number(opacitySlider.value),
+                pane: "rasterPane",
+                interactive: false,
+            });
+            controller.addNamedOverlay(overlayConfig.name, newLayer);
+        });
+    });
+    
+    if (selectElement('#sync-maps-toggle').checked) {
+        syncMaps();
+    }
+    
+    setTimeout(() => {
+        mapControllers.forEach(controller => controller.invalidateSize());
+    }, 350); // Delay matches CSS transition for the panel
+}
+
 
 function initialise() {
   const statusElement = selectElement("#status");
@@ -111,19 +158,13 @@ function initialise() {
   const uploadButton = selectElement("#upload-btn");
   const fileNameDisplay = selectElement("#file-name-display");
 
-  const ui = createUIController({
+  ui = createUIController({
     statusElement,
     progressIndicator,
     progressBarFill,
     progressLabel,
     uploadButton,
     fileNameDisplay,
-  });
-
-  // Create the primary map controller
-  mapControllerA = createMapController({
-    containerId: "leaflet-map-a",
-    onStatusUpdate: (message) => ui.setStatus(message),
   });
 
   const modelSelect = selectElement("#model-select");
@@ -138,24 +179,12 @@ function initialise() {
     opacitySlider: selectElement("#opacity"),
     toggleInput: document.querySelector("#toggle-input"),
     toggleMask: document.querySelector("#toggle-mask"),
+    syncMapsToggle: selectElement("#sync-maps-toggle"),
+    clearHistoryBtn: selectElement("#clear-history-btn"),
+    mapCountSelect: selectElement("#map-count-select"),
+    mapSection: selectElement("#map-section"),
+    panelToggleBtn: selectElement("#panel-toggle-btn"),
   };
-
-  // Centralize map control listeners
-  elements.opacitySlider.addEventListener("input", () => {
-    const opacity = Number(elements.opacitySlider.value);
-    mapControllerA?.updateMaskOpacity(opacity);
-    mapControllerB?.updateMaskOpacity(opacity);
-  });
-  elements.toggleInput.addEventListener("change", () => {
-    const visible = elements.toggleInput.checked;
-    mapControllerA?.toggleInput(visible);
-    mapControllerB?.toggleInput(visible);
-  });
-  elements.toggleMask.addEventListener("change", () => {
-    const visible = elements.toggleMask.checked;
-    mapControllerA?.toggleMask(visible);
-    mapControllerB?.toggleMask(visible);
-  });
 
   bindHeroInteractions({
     navLinks: document.querySelectorAll(".nav-link"),
@@ -163,23 +192,51 @@ function initialise() {
     navHandle: document.querySelector(".floating-nav .nav-handle"),
   });
 
+  // --- UI Event Listeners ---
+  elements.mapCountSelect.addEventListener('change', (e) => {
+      const count = parseInt(e.target.value, 10);
+      updateMapLayout(count);
+  });
+
+  elements.syncMapsToggle.addEventListener('change', (e) => {
+    if (e.target.checked) syncMaps();
+    else unsyncMaps();
+  });
+
+  elements.clearHistoryBtn.addEventListener('click', () => {
+    generatedOverlays.clear();
+    nextOverlayId = 0;
+    mapControllers.forEach(controller => controller.clearAllOverlays());
+    ui.setStatus('Prediction history cleared.');
+  });
+  
+  elements.panelToggleBtn.addEventListener('click', () => {
+    const isCollapsed = elements.mapSection.classList.toggle('is-panel-collapsed');
+    elements.panelToggleBtn.setAttribute('aria-expanded', String(!isCollapsed));
+    setTimeout(() => {
+      mapControllers.forEach(c => c.invalidateSize());
+    }, 350);
+  });
+
+  updateMapLayout(1);
+
   initializeUploadWorkflow({
     elements,
     ui,
-    mapController: mapControllerA,
+    mapController: {
+        updateMaskOpacity: (opacity) => mapControllers.forEach(c => c.updateMaskOpacity(opacity)),
+        setInputLayer: (layer) => mapControllers[0]?.setInputLayer(layer),
+        toggleInput: (visible) => mapControllers[0]?.toggleInput(visible),
+        toggleMask: (visible) => mapControllers.forEach(c => c.toggleMask(visible)),
+    },
     onResult: (result, context) => {
-      handleAnalysisResult({
+      handleInferenceResult({
         result,
+        toggles: { maskToggle: elements.toggleMask },
         context,
-        ui,
-        toggles: {
-          maskToggle: elements.toggleMask,
-        },
       });
     },
-    onError: (message) => {
-      console.warn("Upload workflow error", message);
-    },
+    onError: (message) => console.warn("Upload workflow error", message),
   });
 }
 

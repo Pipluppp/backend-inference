@@ -49,6 +49,8 @@ export function initializeUploadWorkflow({
     modelSelect,
     modalitySelect,
     opacitySlider,
+    toggleInput,
+    toggleMask,
   } = elements;
 
   if (!fileInput || !uploadButton || !modelSelect || !modalitySelect || !opacitySlider) {
@@ -97,7 +99,6 @@ export function initializeUploadWorkflow({
         const modelLabel = jobContext.modelLabel
           ?? modelSelect.options[modelSelect.selectedIndex]?.text?.trim()
           ?? model;
-        const modalityLabel = jobContext.modalityLabel ?? modalitySelect.value;
         const opacity = jobContext.opacity ?? Number(opacitySlider.value);
         const fileName = jobContext.fileName
           || data.result?.metadata?.input_file
@@ -105,7 +106,6 @@ export function initializeUploadWorkflow({
         onResult?.(data.result, {
           model,
           modelLabel,
-          modalityLabel,
           opacity,
           fileName,
         });
@@ -162,12 +162,10 @@ export function initializeUploadWorkflow({
     }
 
     const modelType = modelSelect.value;
-    const modelLabel = modelSelect.options[modelSelect.selectedIndex]?.text?.trim() || modelType;
-
-    const modalityKey = modalitySelect.value;
-    const modalityLabel = modalitySelect.options[modalitySelect.selectedIndex]?.text?.trim() || modalityKey;
-    
+    const selectedModelOption = modelSelect.options[modelSelect.selectedIndex];
+    const modelLabel = selectedModelOption?.text?.trim() || modelType;
     const opacityValue = Number(opacitySlider.value);
+    const modalityKey = modalitySelect.value;
     const modality = MODALITY_MAP[modalityKey] ?? "satellite";
 
     ui.setStatus("Uploading…");
@@ -197,7 +195,6 @@ export function initializeUploadWorkflow({
       startProgressPolling(responseData.job_id, {
         model: modelType,
         modelLabel,
-        modalityLabel,
         opacity: opacityValue,
         fileName: file.name,
       });
@@ -238,16 +235,35 @@ export function initializeUploadWorkflow({
     }
   }
 
+  function handleOpacityChange() {
+    mapController?.updateMaskOpacity(Number(opacitySlider.value));
+  }
+
+  function handleInputToggle() {
+    mapController?.toggleInput(toggleInput.checked);
+  }
+
+  function handleMaskToggle() {
+    mapController?.toggleMask(toggleMask.checked);
+  }
+
   fileInput.addEventListener("change", handleFileChange);
   uploadButton.addEventListener("click", (event) => {
     event.preventDefault();
     handleUpload();
   });
-  
+  opacitySlider.addEventListener("input", handleOpacityChange);
+
+  toggleInput?.addEventListener("change", handleInputToggle);
+  toggleMask?.addEventListener("change", handleMaskToggle);
+
   return {
     teardown() {
       stopProgressPolling();
       fileInput.removeEventListener("change", handleFileChange);
+      opacitySlider.removeEventListener("input", handleOpacityChange);
+      toggleInput?.removeEventListener("change", handleInputToggle);
+      toggleMask?.removeEventListener("change", handleMaskToggle);
     },
   };
 }
