@@ -2,6 +2,23 @@ const DEFAULT_VIEW = [14.65, 121.05];
 const DEFAULT_ZOOM = 11;
 const RASTER_PANE = "rasterPane";
 
+// --- Custom Leaflet Control for Info Labels ---
+const InfoLabelControl = L.Control.extend({
+    onAdd: function(map) {
+        this._div = L.DomUtil.create('div', 'leaflet-control-infolabel');
+        this.update();
+        return this._div;
+    },
+    update: function(text = '') {
+        if (this._div) {
+            this._div.innerHTML = text ? `<span>${text}</span>` : '';
+            this._div.style.display = text ? 'block' : 'none';
+        }
+    }
+});
+L.control.infoLabel = function(opts) { return new InfoLabelControl(opts); };
+// ---
+
 function ensureGoogleMapsReady(timeout = 8000) {
   return new Promise((resolve, reject) => {
     if (window.google && window.google.maps) {
@@ -81,6 +98,7 @@ export function createMapController({
   );
   map.createPane(RASTER_PANE);
   map.getPane(RASTER_PANE).style.zIndex = 650;
+  const infoLabel = L.control.infoLabel({ position: 'bottomright' }).addTo(map);
 
   const defaultFlyPadding = L.point(48, 48);
   const defaultFlyOptions = {
@@ -92,28 +110,29 @@ export function createMapController({
 
   const pendingOverlayRegistrations = [];
   let layerControl = null;
+
+  function registerOverlayWithControl(layer, name) {
+    if (layerControl) {
+        layerControl.addOverlay(layer, name);
+    } else {
+        pendingOverlayRegistrations.push({ layer, name });
+    }
+  }
+
   createBaseLayers(map, onStatusUpdate)
-    .then((control) => {
+    .then((control) => { 
       layerControl = control;
       while (pendingOverlayRegistrations.length > 0) {
         const { layer, name } = pendingOverlayRegistrations.shift();
         layerControl.addOverlay(layer, name);
       }
     })
-    .catch((error) => {
-      console.error("Failed to initialise base layers", error);
-    });
+    .catch((error) => console.error("Failed to initialise base layers", error));
 
   let maskVisible = true;
-  let currentBounds = null;
-  let currentOpacity = 0.6;
-
   let inputLayer = null;
   let inputVisible = true;
-
   const overlays = new Map();
-  let overlayCounter = 0;
-  let latestOverlayId = null;
   let isGlobalMaskToggleInProgress = false;
 
   function removeLayerSafely(layer) {
@@ -128,109 +147,69 @@ export function createMapController({
     }
   }
 
-  function registerOverlayWithControl(layer, name) {
-    if (layerControl) {
-      layerControl.addOverlay(layer, name);
-    } else {
-      pendingOverlayRegistrations.push({ layer, name });
+  function updateActiveLabel() {
+    let activeOverlayName = '';
+    const activeLayers = Array.from(overlays.entries()).reverse();
+    for (const [layer, state] of activeLayers) {
+        if (map.hasLayer(layer)) {
+            activeOverlayName = state.name;
+            break;
+        }
     }
-  }
-
-  function findOverlayByLayer(layerInstance) {
-    for (const overlay of overlays.values()) {
-      if (overlay.layer === layerInstance) {
-        return overlay;
-      }
-    }
-    return null;
+    infoLabel.update(activeOverlayName);
   }
 
   map.on("overlayadd", (event) => {
-    const overlay = findOverlayByLayer(event.layer);
+    const overlay = overlays.get(event.layer);
     if (overlay) {
-      overlay.isActive = true;
-      if (!isGlobalMaskToggleInProgress) {
-        overlay.shouldDisplay = true;
-      }
+        if (!isGlobalMaskToggleInProgress) overlay.shouldDisplay = true;
     }
+    updateActiveLabel();
   });
 
   map.on("overlayremove", (event) => {
-    const overlay = findOverlayByLayer(event.layer);
+    const overlay = overlays.get(event.layer);
     if (overlay) {
-      overlay.isActive = false;
-      if (!isGlobalMaskToggleInProgress) {
-        overlay.shouldDisplay = false;
-      }
+        if (!isGlobalMaskToggleInProgress) overlay.shouldDisplay = false;
     }
+    updateActiveLabel();
   });
 
   return {
-    renderMask(leafletConfig, options = {}) {
-      if (!leafletConfig || !leafletConfig.bounds || !leafletConfig.tiff_url) {
-        throw new Error("Invalid mask configuration");
-      }
+    addNamedOverlay(name, layer, options = {}) {
+        if (!layer || !name) return;
 
-      const { bounds, tiff_url: url } = leafletConfig;
-      currentBounds = [[bounds.south, bounds.west], [bounds.north, bounds.east]];
-      currentOpacity = Number(options.opacity ?? currentOpacity ?? 0.6);
+        overlays.set(layer, { name, shouldDisplay: true });
+        registerOverlayWithControl(layer, name);
 
-      const overlayId = ++overlayCounter;
-      const layerName = options.layerName || `Inference ${overlayId}`;
-      const overlayMetadata = options.metadata ?? {};
-
-      const overlayLayer = L.imageOverlay(url, currentBounds, {
-        opacity: currentOpacity,
-        pane: RASTER_PANE,
-        interactive: false,
-      });
-
-      const overlayRecord = {
-        id: overlayId,
-        name: layerName,
-        layer: overlayLayer,
-        metadata: overlayMetadata,
-        shouldDisplay: true,
-        isActive: false,
-      };
-
-      overlays.set(overlayId, overlayRecord);
-      latestOverlayId = overlayId;
-
-      registerOverlayWithControl(overlayLayer, layerName);
-
-      if (maskVisible) {
-        addLayerSafely(overlayLayer);
-        overlayRecord.isActive = true;
-      }
-
-      if (options.fit) {
-        this.fitToBounds(bounds);
-      }
+        if (maskVisible) {
+            addLayerSafely(layer);
+            updateActiveLabel();
+        }
+        
+        if (options.fit) {
+            this.fitToBounds(layer.getBounds());
+        }
     },
 
-    clearMask() {
+    clearAllOverlays() {
       isGlobalMaskToggleInProgress = true;
       try {
-        overlays.forEach((overlay) => {
-          removeLayerSafely(overlay.layer);
-          if (layerControl) {
-            layerControl.removeLayer(overlay.layer);
-          }
+        overlays.forEach((_state, layer) => {
+          removeLayerSafely(layer);
+          if (layerControl) layerControl.removeLayer(layer);
         });
       } finally {
         isGlobalMaskToggleInProgress = false;
       }
       overlays.clear();
       pendingOverlayRegistrations.length = 0;
-      latestOverlayId = null;
-      currentBounds = null;
+      infoLabel.update('');
     },
 
     updateMaskOpacity(opacity) {
-      currentOpacity = Number(opacity);
-      overlays.forEach((overlay) => {
-        overlay.layer.setOpacity(currentOpacity);
+      overlays.forEach((_value, layer) => {
+        if(layer.setOpacity) layer.setOpacity(Number(opacity));
       });
     },
 
@@ -238,49 +217,41 @@ export function createMapController({
       maskVisible = Boolean(visible);
       isGlobalMaskToggleInProgress = true;
       try {
-        overlays.forEach((overlay) => {
-          if (maskVisible) {
-            if (overlay.shouldDisplay) {
-              addLayerSafely(overlay.layer);
-            }
+        overlays.forEach((state, layer) => {
+          if (maskVisible && state.shouldDisplay) {
+            addLayerSafely(layer);
           } else {
-            removeLayerSafely(overlay.layer);
+            removeLayerSafely(layer);
           }
         });
       } finally {
         isGlobalMaskToggleInProgress = false;
       }
+      updateActiveLabel();
     },
 
     setInputLayer(layerInstance) {
       removeLayerSafely(inputLayer);
       inputLayer = layerInstance;
-      if (inputVisible && inputLayer) {
-        addLayerSafely(inputLayer);
-      }
+      if (inputVisible && inputLayer) addLayerSafely(inputLayer);
     },
 
     toggleInput(visible) {
       inputVisible = Boolean(visible);
       if (!inputLayer) return;
-      if (inputVisible) {
-        addLayerSafely(inputLayer);
-      } else {
-        removeLayerSafely(inputLayer);
-      }
+      if (inputVisible) addLayerSafely(inputLayer);
+      else removeLayerSafely(inputLayer);
     },
 
     fitToBounds(boundsObject, options = {}) {
-      if (!boundsObject && !currentBounds) return;
-      const bounds = boundsObject
-        ? [[boundsObject.south, boundsObject.west], [boundsObject.north, boundsObject.east]]
-        : currentBounds;
-      if (bounds) {
-        const flyOptions = {
-          ...defaultFlyOptions,
-          ...(options.flyOptions ?? {}),
-        };
+      if (!boundsObject) return;
+      
+      const bounds = (boundsObject instanceof L.LatLngBounds) ? boundsObject :
+        (boundsObject.south) ? [[boundsObject.south, boundsObject.west], [boundsObject.north, boundsObject.east]] :
+        boundsObject;
 
+      if (bounds) {
+        const flyOptions = { ...defaultFlyOptions, ...(options.flyOptions ?? {}) };
         try {
           map.flyToBounds(bounds, flyOptions);
         } catch (error) {
@@ -288,6 +259,14 @@ export function createMapController({
           map.fitBounds(bounds, flyOptions);
         }
       }
+    },
+    
+    invalidateSize() {
+      setTimeout(() => map.invalidateSize({ debounceMoveend: true }), 10);
+    },
+
+    teardown() {
+      map.remove();
     },
 
     get mapInstance() {

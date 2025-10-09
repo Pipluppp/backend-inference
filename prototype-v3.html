@@ -88,9 +88,19 @@
                 </div>
 
                 <section id="map-section" class="analysis-map" aria-label="Upload GeoTIFF for analysis">
-                    <div id="leaflet-map" class="analysis-map__canvas"></div>
                     <aside id="uipanel" class="analysis-map__panel">
-                        <div class="panel__header">Upload GeoTIFF</div>
+                        <div class="panel__header">Analysis Tools</div>
+
+                        <div class="panel__view-controls">
+                            <label class="panel__label" for="map-count-select">Map View</label>
+                            <select id="map-count-select" class="panel__select">
+                                <option value="1" selected>Single Map</option>
+                                <option value="2">2 Maps</option>
+                                <option value="3">3 Maps</option>
+                                <option value="4">4 Maps</option>
+                            </select>
+                        </div>
+                        
                         <label class="panel__label" for="model-select">Model</label>
                         <select id="model-select" class="panel__select">
                             <option value="convnext_all">ConvNeXt All</option>
@@ -131,12 +141,21 @@
                         </div>
 
                         <div class="panel__toggles">
-                            <label class="panel__toggle"><input id="toggle-input" type="checkbox" checked> Show input
-                                raster</label>
-                            <label class="panel__toggle"><input id="toggle-mask" type="checkbox" checked> Show
-                                prediction mask</label>
+                            <label class="panel__toggle"><input id="toggle-input" type="checkbox" checked> Show input raster</label>
+                            <label class="panel__toggle"><input id="toggle-mask" type="checkbox" checked> Show prediction mask</label>
+                            <label class="panel__toggle"><input id="sync-maps-toggle" type="checkbox"> Sync Maps</label>
+                        </div>
+
+                        <div class="panel__actions">
+                            <button id="clear-history-btn" class="panel__secondary-button">Clear Prediction History</button>
                         </div>
                     </aside>
+                    <div id="map-view-container" class="analysis-map__viewer">
+                        <!-- JS injects map instances here -->
+                    </div>
+                     <button id="panel-toggle-btn" class="analysis-map__panel-toggle" aria-label="Toggle analysis panel" aria-controls="uipanel" aria-expanded="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/></svg>
+                    </button>
                 </section>
 
                 <section class="document__wandb" aria-labelledby="model-performance">
