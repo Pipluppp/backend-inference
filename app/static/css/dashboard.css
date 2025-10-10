@@ -1,4 +1,57 @@
 :root {
+    --radius-lg: 32px;
+    --radius-md: 20px;
+    --radius-sm: 12px;
+    --transition-theme: 320ms ease;
+}
+
+body {
+    margin: 0;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+    background: var(--page-bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+    position: relative;
+    transition: background var(--transition-theme), color var(--transition-theme);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--network-overlay);
+    background-size: cover;
+    opacity: var(--network-overlay-opacity);
+    pointer-events: none;
+    z-index: -1;
+}
+
+body[data-theme="neural"] {
+    color-scheme: light;
+    --page-bg: radial-gradient(circle at 18% 12%, #f1fff8 0%, #d7fbe6 42%, #baf1d6 70%, #8dddc1 100%);
+    --surface-bg: rgba(255, 255, 255, 0.82);
+    --surface-alt: rgba(233, 253, 244, 0.94);
+    --surface-border: rgba(16, 185, 129, 0.18);
+    --surface-highlight: rgba(74, 222, 128, 0.22);
+    --text-primary: #0b4334;
+    --text-muted: rgba(9, 132, 103, 0.78);
+    --text-subtle: rgba(11, 83, 65, 0.66);
+    --accent: #0f766e;
+    --accent-strong: #15803d;
+    --shadow-xl: 0 32px 120px rgba(13, 148, 136, 0.18);
+    --shadow-md: 0 18px 60px rgba(45, 212, 191, 0.18);
+    --header-blend: multiply;
+    --badge-bg: rgba(34, 197, 94, 0.12);
+    --network-overlay: radial-gradient(circle at 20% 18%, rgba(94, 234, 212, 0.26) 0%, transparent 45%),
+        radial-gradient(circle at 80% 65%, rgba(163, 230, 53, 0.2) 0%, transparent 60%),
+        linear-gradient(120deg, rgba(20, 184, 166, 0.18), transparent 60%),
+        repeating-linear-gradient(135deg, rgba(45, 212, 191, 0.08) 0 14px, transparent 14px 28px);
+    --network-overlay-opacity: 1;
+}
+
+body[data-theme="midnight"] {
+    color-scheme: dark;
     --page-bg: radial-gradient(circle at 20% 20%, #0f172a 0%, #020617 55%, #01010f 100%);
     --surface-bg: rgba(15, 23, 42, 0.78);
     --surface-alt: rgba(15, 23, 42, 0.58);
@@ -9,26 +62,21 @@
     --text-subtle: rgba(148, 163, 184, 0.72);
     --accent: #38bdf8;
     --accent-strong: #a855f7;
-    --radius-lg: 32px;
-    --radius-md: 20px;
-    --radius-sm: 12px;
     --shadow-xl: 0 32px 120px rgba(2, 6, 23, 0.55);
     --shadow-md: 0 18px 60px rgba(2, 6, 23, 0.45);
+    --header-blend: screen;
+    --badge-bg: rgba(56, 189, 248, 0.08);
+    --network-overlay: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18) 0%, transparent 60%),
+        radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.22) 0%, transparent 58%),
+        linear-gradient(160deg, rgba(79, 70, 229, 0.24), transparent 55%),
+        repeating-linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0 18px, transparent 18px 36px);
+    --network-overlay-opacity: 0.9;
 }
 
 *,
 *::before,
 *::after {
     box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
-    background: var(--page-bg);
-    color: var(--text-primary);
-    min-height: 100vh;
-    line-height: 1.6;
 }
 
 a {
@@ -50,7 +98,7 @@ a:focus-visible {
     position: relative;
     padding: 48px;
     border-radius: var(--radius-lg);
-    background: linear-gradient(140deg, rgba(15, 23, 42, 0.75), rgba(59, 130, 246, 0.25));
+    background: linear-gradient(140deg, var(--surface-alt), rgba(22, 163, 74, 0.22));
     border: 1px solid var(--surface-border);
     box-shadow: var(--shadow-xl);
     overflow: hidden;
@@ -61,8 +109,16 @@ a:focus-visible {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18) 0%, transparent 60%);
-    mix-blend-mode: screen;
+    background: radial-gradient(circle at 18% 18%, rgba(34, 197, 94, 0.22) 0%, transparent 62%),
+        radial-gradient(circle at 82% 22%, rgba(16, 185, 129, 0.24) 0%, transparent 60%);
+    mix-blend-mode: var(--header-blend, screen);
+}
+
+.page-header__top {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
 }
 
 .page-header__eyebrow {
@@ -81,6 +137,12 @@ a:focus-visible {
     height: 1px;
     background: var(--text-subtle);
     opacity: 0.7;
+}
+
+.page-header__actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
 }
 
 .page-header h1 {
@@ -166,7 +228,7 @@ a:focus-visible {
     font-size: 2rem;
     font-weight: 600;
     margin-bottom: 6px;
-    color: var(--accent);
+    color: var(--accent-strong);
 }
 
 .summary-card__meta {
@@ -198,6 +260,80 @@ a:focus-visible {
     min-height: 100%;
 }
 
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 999px;
+    padding: 10px 18px;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 160ms ease, transform 160ms ease, color 160ms ease;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+    transform: translateY(-1px);
+    background: var(--surface-alt);
+    color: var(--accent);
+}
+
+.theme-toggle__icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle__icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.theme-toggle__text {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.2;
+}
+
+.theme-toggle__label {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+}
+
+.theme-toggle__action {
+    font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+    .page-header {
+        padding: 36px 28px;
+    }
+
+    .page-header__top {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .page-header__actions {
+        width: 100%;
+    }
+
+    .theme-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 .result-card__header {
     display: flex;
     justify-content: space-between;
@@ -217,7 +353,7 @@ a:focus-visible {
     text-transform: uppercase;
     letter-spacing: 0.2em;
     color: var(--text-subtle);
-    background: rgba(56, 189, 248, 0.08);
+    background: var(--badge-bg);
     border-radius: 999px;
     padding: 6px 12px;
 }

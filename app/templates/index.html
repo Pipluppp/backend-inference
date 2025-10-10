@@ -13,10 +13,25 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}">
 </head>
 
-<body>
+<body data-theme="neural">
     <div class="page-shell">
         <header class="page-header">
-            <span class="page-header__eyebrow">Inference Summary</span>
+            <div class="page-header__top">
+                <span class="page-header__eyebrow">Inference Summary</span>
+                <div class="page-header__actions">
+                    <button class="theme-toggle" type="button" data-theme-toggle>
+                        <span class="theme-toggle__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.999 2a1 1 0 0 1 .894.553l1.764 3.528 3.894.566a1 1 0 0 1 .554 1.705l-2.817 2.747.665 3.872a1 1 0 0 1-1.451 1.054L12 14.82l-3.502 1.838a1 1 0 0 1-1.451-1.054l.665-3.872-2.817-2.747a1 1 0 0 1 .554-1.705l3.894-.566 1.764-3.528A1 1 0 0 1 12 2Z" />
+                            </svg>
+                        </span>
+                        <span class="theme-toggle__text">
+                            <span class="theme-toggle__label">Theme</span>
+                            <span class="theme-toggle__action" data-theme-toggle-text>Switch to Midnight Prism</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
             <h1>Local Model Inference Report</h1>
             <div class="page-header__meta">
                 <span><strong>Model</strong> {{ model_name }}</span>
@@ -112,6 +127,7 @@
             </div>
         </section>
     </div>
+    <script src="{{ url_for('static', path='js/theme-toggle.js') }}" defer></script>
 </body>
 
 </html>
