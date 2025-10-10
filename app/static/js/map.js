@@ -1,6 +1,7 @@
 const DEFAULT_VIEW = [14.65, 121.05];
 const DEFAULT_ZOOM = 11;
 const RASTER_PANE = "rasterPane";
+const QC_BOUNDARY_PANE = "qcBoundaryPane";
 
 // --- Custom Leaflet Control for Info Labels ---
 const InfoLabelControl = L.Control.extend({
@@ -96,8 +97,46 @@ export function createMapController({
     DEFAULT_VIEW,
     DEFAULT_ZOOM,
   );
+  
+
   map.createPane(RASTER_PANE);
-  map.getPane(RASTER_PANE).style.zIndex = 650;
+  map.getPane(RASTER_PANE).style.zIndex = 450;
+
+  map.createPane(QC_BOUNDARY_PANE);
+  map.getPane(QC_BOUNDARY_PANE).style.zIndex = 500; 
+  map.getPane(QC_BOUNDARY_PANE).style.pointerEvents = 'none'; 
+
+  let qcBoundaryLayer = null;
+
+  const qcBoundaryStyle = {
+      "color": "#ffffff",
+      "weight": 2.5,
+      "opacity": 0.75,
+      "fillOpacity": 0.05,
+      "pane": QC_BOUNDARY_PANE
+  };
+
+  // Fetch the GeoJSON data
+  fetch('/static/map/qc-boundary-merged.geojson')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok for qc-boundary.geojson');
+        }
+        return response.json();
+    })
+    .then(data => {
+        qcBoundaryLayer = L.geoJSON(data, { style: qcBoundaryStyle });
+        // Optionally add it to the map by default if the checkbox is checked
+        const toggle = document.querySelector('#toggle-qc-boundary');
+        if (toggle && toggle.checked) {
+            qcBoundaryLayer.addTo(map);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading or parsing qc-boundary.geojson:', error);
+        if (onStatusUpdate) onStatusUpdate("Could not load QC boundary.");
+    });
+
   const infoLabel = L.control.infoLabel({ position: 'bottomright' }).addTo(map);
 
   const defaultFlyPadding = L.point(48, 48);
@@ -241,6 +280,16 @@ export function createMapController({
       if (!inputLayer) return;
       if (inputVisible) addLayerSafely(inputLayer);
       else removeLayerSafely(inputLayer);
+    },
+
+    toggleQCBoundary(visible) {
+        if (!qcBoundaryLayer) return; 
+
+        if (visible) {
+            map.addLayer(qcBoundaryLayer);
+        } else {
+            map.removeLayer(qcBoundaryLayer);
+        }
     },
 
     fitToBounds(boundsObject, options = {}) {
