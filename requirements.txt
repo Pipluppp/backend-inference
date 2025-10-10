@@ -5,3 +5,5 @@ albumentations
 numpy
 Pillow
 rasterio
+pyproj
+python-multipart
