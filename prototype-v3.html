@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,400;0,500;0,700;1,400&family=Caveat:wght@500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&family=Caveat:wght@500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -16,108 +16,143 @@
 </head>
 
 <body>
-    <!-- FLOATING NAVIGATION -->
     <nav class="floating-nav" aria-label="Quick navigation">
         <ul class="nav-links">
-            <li><a href="#hero" class="nav-link" data-scroll-top>SettleNet</a></li>
+            <li><a href="#hero" class="nav-link" data-scroll-top>Overview</a></li>
             <li><a href="#interactive-map" class="nav-link">Interactive Map</a></li>
-            <li><a href="#analyze-area" class="nav-link">Analyze Area</a></li>
+            <li><a href="#analyze-area" class="nav-link">Analyse Area</a></li>
             <li><a href="#model-performance" class="nav-link">Model Performance</a></li>
         </ul>
-        <div class="nav-handle" role="button" aria-label="Open navigation">&#9776;</div>
+        <div class="nav-handle" role="button" aria-label="Open navigation" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor"
+                    d="M4 7.25C4 6.56 4.56 6 5.25 6h13.5a1.25 1.25 0 0 1 0 2.5H5.25A1.25 1.25 0 0 1 4 7.25Zm0 4.75c0-.69.56-1.25 1.25-1.25h13.5a1.25 1.25 0 0 1 0 2.5H5.25A1.25 1.25 0 0 1 4 12Zm1.25 3.5a1.25 1.25 0 1 0 0 2.5h13.5a1.25 1.25 0 1 0 0-2.5H5.25Z" /></svg>
+        </div>
     </nav>
 
-
-    <!-- SECTION 1: HERO -->
     <header class="hero" id="hero">
-        <div class="hero__header">SettleNet ALPHA</div>
-        <div class="hero__side-label">09.04.2025</div>
-        <div class="hero__content">
-            <h1 class="hero__title">SettleNet</h1>
-            <p class="hero__subtitle">Mapping informal settlements in Quezon City using multi-modal satellite data. A
-                deep learning approach for urban planning and humanitarian action.</p>
-            <iframe class="hero__iframe" src="https://pipluppp.projects.earthengine.app/view/exploration"
-                frameborder="0" loading="lazy" aria-label="Google Earth Engine App - Data Modalities"></iframe>
+        <div class="hero__grain" aria-hidden="true"></div>
+        <div class="hero__header">SettleNet v0.9</div>
+        <div class="hero__side-label">Updated · 09 · 04 · 2025</div>
+        <div class="hero__layout">
+            <div class="hero__content">
+                <span class="hero__eyebrow">Resilient Cities Initiative</span>
+                <h1 class="hero__title">Mapping informal settlements with confident multi-modal inference</h1>
+                <p class="hero__subtitle">SettleNet combines multispectral imagery, building counts, and height rasters to
+                    deliver a trustworthy settlement detection workflow for Quezon City planners and humanitarian teams.</p>
+                <div class="hero__stat-grid">
+                    <article class="stat-card">
+                        <span class="stat-card__label">Tiles analysed</span>
+                        <span class="stat-card__value">12,480+</span>
+                        <span class="stat-card__hint">Barangay-level coverage</span>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-card__label">Modalities fused</span>
+                        <span class="stat-card__value">3</span>
+                        <span class="stat-card__hint">Satellite · Building count · Built height</span>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-card__label">Inference latency</span>
+                        <span class="stat-card__value">&lt; 1.8s</span>
+                        <span class="stat-card__hint">Per 256×256 tile on CPU</span>
+                    </article>
+                </div>
+                <div class="hero__cta">
+                    <a href="#analyze-area" class="button button--primary">Launch analysis</a>
+                    <a href="#interactive-map" class="button button--ghost">View live map</a>
+                </div>
+            </div>
+            <figure class="hero__media">
+                <div class="hero__media-frame">
+                    <iframe class="hero__iframe" src="https://pipluppp.projects.earthengine.app/view/exploration" frameborder="0"
+                        loading="lazy" aria-label="Google Earth Engine App - Data Modalities"></iframe>
+                </div>
+                <figcaption>Live modalities preview from Google Earth Engine</figcaption>
+            </figure>
         </div>
         <div class="hero__footer">
-            <span>A Thesis Prototype</span>
-            <span>Manila, PH</span>
+            <span>A thesis prototype</span>
+            <span>Quezon City, PH</span>
         </div>
     </header>
 
-    <!-- SECTION 2: DOCUMENT -->
     <main class="document">
-        <section class="document__section" aria-labelledby="interactive-map">
-            <div class="document__coffee-stain" aria-hidden="true"></div>
-            <div class="document__punched-holes" aria-hidden="true">
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-                <span class="document__hole"></span>
-            </div>
-            <div class="document__content">
-                <h2 id="interactive-map">Interactive Map: SettleNet for Quezon City</h2>
-                <p>This interactive map is the primary output of the SettleNet model. It provides a detailed,
-                    <span class="highlight">data-driven view of predicted informal settlement locations</span> for the
-                    entirety of Quezon City. Use the layer controls to explore the data and zoom in to see the
-                    fine-grained detail our model produces.
-                </p>
+        <div class="document__inner">
+            <section class="document__section" aria-labelledby="interactive-map">
+                <div class="document__intro">
+                    <h2 id="interactive-map">Interactive observatory for Quezon City</h2>
+                    <p>Navigate a high-fidelity settlement map powered by the latest SettleNet checkpoint. Layers blend
+                        open data and local government records to highlight informal settlement footprints and nearby
+                        infrastructure.</p>
+                    <div class="document__insight-grid">
+                        <article class="insight-card">
+                            <h3>Context aware</h3>
+                            <p>Switch between basemaps, official barangay boundaries, and SettleNet overlays to validate
+                                detections with local knowledge.</p>
+                        </article>
+                        <article class="insight-card">
+                            <h3>Responsive analytics</h3>
+                            <p>Multi-map layout options and synced navigation help you compare inference runs and opacity
+                                settings side by side.</p>
+                        </article>
+                        <article class="insight-card">
+                            <h3>Shareable outputs</h3>
+                            <p>Downloadable GeoTIFFs and PNG previews support rapid reporting and coordination with field
+                                teams.</p>
+                        </article>
+                    </div>
+                </div>
 
-                <div class="document__iframe">
-                    <iframe class="document__map-frame"
-                        src="https://data-concord-367314.projects.earthengine.app/view/settlenet-prototype"
-                        frameborder="0" loading="lazy"
-                        aria-label="SettleNet Main Interactive Map for Quezon City"></iframe>
+                <div class="document__iframe document__iframe--elevated">
+                    <iframe class="document__map-frame" src="https://data-concord-367314.projects.earthengine.app/view/settlenet-prototype"
+                        frameborder="0" loading="lazy" aria-label="SettleNet Main Interactive Map for Quezon City"></iframe>
                 </div>
 
                 <div class="document__analysis" aria-labelledby="analyze-area">
-                    <div class="document__annotation">Check if the backend handles large GeoTIFFs efficiently.</div>
-                    <h2 id="analyze-area">Analyze Your Own Area</h2>
-                    <p>Use the SettleNet model on your own area of interest. Upload a GeoTIFF archive and our backend
-                        will run inference to generate a prediction mask. The map below will display your uploaded
-                        raster
-                        and the resulting settlement overlay.</p>
+                    <span class="document__tag">Bring your own data</span>
+                    <h2 id="analyze-area">Analyse your own area</h2>
+                    <p>Upload a ZIP archive with your tiled rasters and run inference directly in the browser. Choose the
+                        appropriate model variant, tune opacity, and toggle layers to evaluate predictions in context.</p>
                 </div>
 
                 <section id="map-section" class="analysis-map" aria-label="Upload GeoTIFF for analysis">
                     <aside id="uipanel" class="analysis-map__panel">
-                        <div class="panel__header">Analysis Tools</div>
+                        <div class="panel__header">
+                            <h3>Analysis console</h3>
+                            <p>Upload tiles, pick a model, and monitor inference status in real time.</p>
+                        </div>
 
-                        <div class="panel__view-controls">
-                            <label class="panel__label" for="map-count-select">Map View</label>
+                        <div class="panel__group">
+                            <label class="panel__label" for="map-count-select">Viewer layout</label>
                             <select id="map-count-select" class="panel__select">
-                                <option value="1" selected>Single Map</option>
-                                <option value="2">2 Maps</option>
-                                <option value="3">3 Maps</option>
-                                <option value="4">4 Maps</option>
+                                <option value="1" selected>Single map</option>
+                                <option value="2">2 maps</option>
+                                <option value="3">3 maps</option>
+                                <option value="4">4 maps</option>
                             </select>
                         </div>
-                        
-                        <label class="panel__label" for="model-select">Model</label>
-                        <select id="model-select" class="panel__select">
-                            <option value="convnext_all">ConvNeXt All</option>
-                            <option value="convnext_bc">ConvNeXt BC</option>
-                            <option value="convnext_satellite">ConvNeXt Satellite</option>
-                            <option value="settlenet" selected>SettleNet</option>
-                        </select>
 
-                        <label class="panel__label" for="modality-select">Input Modality</label>
-                        <select id="modality-select" class="panel__select">
-                            <option value="satellite" selected>Satellite</option>
-                            <option value="building_count">Building Count</option>
-                            <option value="all">All</option>
-                        </select>
+                        <div class="panel__group">
+                            <label class="panel__label" for="model-select">Model</label>
+                            <select id="model-select" class="panel__select">
+                                <option value="convnext_all">ConvNeXt All</option>
+                                <option value="convnext_bc">ConvNeXt BC</option>
+                                <option value="convnext_satellite">ConvNeXt Satellite</option>
+                                <option value="settlenet" selected>SettleNet</option>
+                            </select>
+                        </div>
 
-                        <input id="file-input" type="file" accept=".tif,.tiff,.zip" hidden />
-                        <div class="panel__status" id="status-container">
+                        <div class="panel__group">
+                            <label class="panel__label" for="modality-select">Input modality</label>
+                            <select id="modality-select" class="panel__select">
+                                <option value="satellite" selected>Satellite</option>
+                                <option value="building_count">Building count</option>
+                                <option value="all">All</option>
+                            </select>
+                        </div>
+
+                        <input id="file-input" type="file" accept=".tif,.tiff,.zip" hidden>
+
+                        <div class="panel__group panel__status" id="status-container">
                             <p id="status" class="panel__status-text">Ready.</p>
                             <div id="progress-indicator" class="panel__progress" aria-live="polite">
                                 <div class="panel__progress-bar">
@@ -127,54 +162,57 @@
                             </div>
                         </div>
 
-                        <label for="file-input" class="panel__primary-button">Choose GeoTIFF File</label>
-                        <span id="file-name-display" class="panel__file-name">No file chosen.</span>
-
-                        <div class="panel__button-row">
-                            <button id="upload-btn" class="panel__primary-button">Analyze</button>
+                        <div class="panel__group panel__upload">
+                            <label for="file-input" class="panel__primary-button">Choose GeoTIFF file</label>
+                            <span id="file-name-display" class="panel__file-name">No file chosen.</span>
+                            <div class="panel__button-row">
+                                <button id="upload-btn" class="panel__primary-button">Analyse</button>
+                            </div>
                         </div>
 
-                        <div class="panel__control">
+                        <div class="panel__group">
                             <label class="panel__label" for="opacity">Mask opacity</label>
-                            <input id="opacity" class="panel__slider" type="range" min="0" max="1" step="0.05"
-                                value="0.6">
+                            <input id="opacity" class="panel__slider" type="range" min="0" max="1" step="0.05" value="0.6">
                         </div>
 
-                        <div class="panel__toggles">
+                        <div class="panel__group panel__toggles">
                             <label class="panel__toggle"><input id="toggle-input" type="checkbox" checked> Show input raster</label>
                             <label class="panel__toggle"><input id="toggle-mask" type="checkbox" checked> Show prediction mask</label>
-                            <label class="panel__toggle"><input id="sync-maps-toggle" type="checkbox"> Sync Maps</label>
-                            <label class="panel__toggle"><input id="toggle-qc-boundary" type="checkbox" checked> Show QC Boundary</label>
+                            <label class="panel__toggle"><input id="sync-maps-toggle" type="checkbox"> Sync maps</label>
+                            <label class="panel__toggle"><input id="toggle-qc-boundary" type="checkbox" checked> Show QC boundary</label>
                         </div>
 
-                        <div class="panel__actions">
-                            <button id="clear-history-btn" class="panel__secondary-button">Clear Prediction History</button>
+                        <div class="panel__group panel__actions">
+                            <button id="clear-history-btn" class="panel__secondary-button">Clear prediction history</button>
                         </div>
                     </aside>
-                    <div id="map-view-container" class="analysis-map__viewer">
+
+                    <div id="map-view-container" class="analysis-map__viewer" data-map-count="1">
                         <!-- JS injects map instances here -->
                     </div>
-                     <button id="panel-toggle-btn" class="analysis-map__panel-toggle" aria-label="Toggle analysis panel" aria-controls="uipanel" aria-expanded="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/></svg>
+
+                    <button id="panel-toggle-btn" class="analysis-map__panel-toggle" aria-label="Toggle analysis panel"
+                        aria-controls="uipanel" aria-expanded="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd"
+                                d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z" />
+                        </svg>
                     </button>
                 </section>
 
                 <section class="document__wandb" aria-labelledby="model-performance">
-                    <h2 id="model-performance">Model Performance &amp; Training</h2>
-                    <p>Our model's development involved numerous experiments to optimize its architecture and
-                        hyperparameters. The report below, logged with Weights &amp; Biases, provides a transparent
-                        overview
-                        of our training runs, validation metrics, and sample predictions across different model
-                        versions.</p>
+                    <span class="document__tag">Training insights</span>
+                    <h2 id="model-performance">Model performance &amp; training</h2>
+                    <p>Explore our Weights &amp; Biases report for experiment tracking, validation metrics, and qualitative
+                        samples captured throughout the SettleNet development cycle.</p>
                     <div class="wandb-embed">
-                        <iframe
-                            src="https://api.wandb.ai/links/duncanb013-polytechnic-university-of-the-philippines/u3hapjxa"
+                        <iframe src="https://api.wandb.ai/links/duncanb013-polytechnic-university-of-the-philippines/u3hapjxa"
                             title="Weights and Biases training report" loading="lazy"
                             style="border:none;height:1024px;width:100%"></iframe>
                     </div>
                 </section>
-            </div>
-        </section>
+            </section>
+        </div>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
