@@ -21,6 +21,11 @@ MODEL_MAPPING = {
         "model_file": "convnext-sat-xqkdckas.pth",
         "modality": "satellite",
     },
+    "convnext_unet_all": {
+        "model_name": "ConvNeXtUNet_PlainDecoder",
+        "model_file": "convnext-unet-all.pth",
+        "modality": "all",
+    },
     "convnext_bh": {
         "model_name": "ConvNeXtUNet",
         "model_file": "convnext-bh.pth",
@@ -65,6 +70,9 @@ class Config:
     ENCODER_BLOCKS_PER_STAGE: list[int] = field(default_factory=lambda: [2, 2, 8, 2])
     DECODER_CONVNEXT_BLOCKS: list[int] = field(default_factory=lambda: [2, 2, 2, 2])
     FINAL_UPSAMPLING_CHANNELS: list[int] = field(default_factory=lambda: [80, 40, 20])
+    UNET_DECODER_CHANNEL_LIST: list[int] = field(
+        default_factory=lambda: [512, 256, 128, 64]
+    )
     ENCODER_DROP_PATH_RATE: float = 0.0
     ENCODER_LAYER_SCALE_INIT_VALUE: float = 1e-6
 

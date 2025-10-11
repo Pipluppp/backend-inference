@@ -15,7 +15,11 @@ import tempfile
 import zipfile
 import shutil
 
-from app.models.architectures import ConvNeXtUNet, SettleNet
+from app.models.architectures import (
+    ConvNeXtUNet,
+    ConvNeXtUNet_PlainDecoder,
+    SettleNet,
+)
 from app.utils.config import Config, setup_config, get_model_config
 from app.utils.data_processing import (
     load_and_preprocess_image,
@@ -93,6 +97,8 @@ def load_model_by_type(model_type: str) -> Tuple[torch.nn.Module, "Config"]:
 
             if model_name == "ConvNeXtUNet":
                 model = ConvNeXtUNet(config_for_shape)
+            elif model_name == "ConvNeXtUNet_PlainDecoder":
+                model = ConvNeXtUNet_PlainDecoder(config_for_shape)
             elif model_name == "SettleNet":
                 model = SettleNet(config_for_shape)
             else:
