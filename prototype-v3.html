@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <link rel="stylesheet" href="/static/css/prototype.css">
+    <link rel="stylesheet" href="/static/css/architecture-viewer.css">
 </head>
 
 <body>
@@ -100,7 +101,7 @@
                                 <option value="4">4 Maps</option>
                             </select>
                         </div>
-                        
+
                         <label class="panel__label" for="model-select">Model</label>
                         <select id="model-select" class="panel__select">
                             <option value="convnext_all">ConvNeXt All</option>
@@ -141,20 +142,28 @@
                         </div>
 
                         <div class="panel__toggles">
-                            <label class="panel__toggle"><input id="toggle-input" type="checkbox" checked> Show input raster</label>
-                            <label class="panel__toggle"><input id="toggle-mask" type="checkbox" checked> Show prediction mask</label>
+                            <label class="panel__toggle"><input id="toggle-input" type="checkbox" checked> Show input
+                                raster</label>
+                            <label class="panel__toggle"><input id="toggle-mask" type="checkbox" checked> Show
+                                prediction mask</label>
                             <label class="panel__toggle"><input id="sync-maps-toggle" type="checkbox"> Sync Maps</label>
                         </div>
 
                         <div class="panel__actions">
-                            <button id="clear-history-btn" class="panel__secondary-button">Clear Prediction History</button>
+                            <button id="clear-history-btn" class="panel__secondary-button">Clear Prediction
+                                History</button>
                         </div>
                     </aside>
                     <div id="map-view-container" class="analysis-map__viewer">
                         <!-- JS injects map instances here -->
                     </div>
-                     <button id="panel-toggle-btn" class="analysis-map__panel-toggle" aria-label="Toggle analysis panel" aria-controls="uipanel" aria-expanded="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/></svg>
+                    <button id="panel-toggle-btn" class="analysis-map__panel-toggle" aria-label="Toggle analysis panel"
+                        aria-controls="uipanel" aria-expanded="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                            viewBox="0 0 16 16">
+                            <path fill-rule="evenodd"
+                                d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z" />
+                        </svg>
                     </button>
                 </section>
 
@@ -170,6 +179,56 @@
                             src="https://api.wandb.ai/links/duncanb013-polytechnic-university-of-the-philippines/u3hapjxa"
                             title="Weights and Biases training report" loading="lazy"
                             style="border:none;height:1024px;width:100%"></iframe>
+                    </div>
+                </section>
+
+                <section class="document__architecture" aria-labelledby="architecture-explorer">
+                    <h2 id="architecture-explorer">Architecture Explorer</h2>
+                    <p>Dig into each encoder and decoder block of the ConvNeXt and SettleNet variants. Hover to preview
+                        tensor dimensions, click to pin details, and switch models to compare design choices.</p>
+                    <div class="architecture-viewer" data-architecture-viewer>
+                        <aside class="architecture-viewer__panel" data-architecture="info-panel" aria-live="polite">
+                            <div class="architecture-viewer__panel-column architecture-viewer__panel-column--primary">
+                                <header class="architecture-viewer__header">
+                                    <div class="architecture-viewer__control-row">
+                                        <h3 class="architecture-viewer__title" data-architecture="panel-heading">
+                                            Architecture Explorer
+                                        </h3>
+                                        <label class="architecture-viewer__select-group"
+                                            for="architecture-model-select">
+                                            <span>Architecture</span>
+                                            <select id="architecture-model-select" class="architecture-viewer__select"
+                                                data-architecture="model-select"
+                                                aria-label="Choose architecture variant"></select>
+                                        </label>
+                                    </div>
+                                    <h4 class="architecture-viewer__subtitle" data-architecture="info-title">
+                                        Hover a module
+                                    </h4>
+                                </header>
+                                <p class="architecture-viewer__summary" data-architecture="info-summary">
+                                    Highlight a block to read its tensor size and layers.
+                                </p>
+                            </div>
+                            <div class="architecture-viewer__panel-column architecture-viewer__panel-column--media">
+                                <div class="architecture-viewer__media" data-architecture="info-media" hidden></div>
+                            </div>
+                            <div class="architecture-viewer__panel-column architecture-viewer__panel-column--meta">
+                                <dl class="architecture-viewer__stats" data-architecture="info-stats"></dl>
+                                <ul class="architecture-viewer__details" data-architecture="info-details"></ul>
+                            </div>
+                        </aside>
+                        <div class="architecture-viewer__canvas">
+                            <div class="architecture-viewer__loading" data-architecture="loading" role="status">
+                                Loading architecture…
+                            </div>
+                            <div class="architecture-viewer__viewport">
+                                <div class="architecture-viewer__svg-wrapper">
+                                    <object class="architecture-viewer__object" data-architecture="svg-object"
+                                        type="image/svg+xml" aria-label=""></object>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>

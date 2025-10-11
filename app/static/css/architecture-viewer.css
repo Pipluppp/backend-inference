@@ -1,0 +1,291 @@
+:root {
+    --model-scale: 0.65;
+    --model-scale-medium: 0.55;
+    --model-scale-small: 0.45;
+}
+
+.architecture-viewer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 1.8vw, 16px);
+    padding: clamp(12px, 4vw, 28px);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(251, 248, 243, 0.9));
+    box-shadow: 0 28px 90px rgba(64, 92, 120, 0.18);
+    backdrop-filter: blur(10px);
+}
+
+.architecture-viewer__panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: clamp(12px, 2vw, 22px);
+    padding: clamp(14px, 3.5vw, 26px);
+    border-radius: 14px;
+    background: rgba(251, 248, 243, 0.96);
+    box-shadow: 0 20px 60px rgba(64, 92, 120, 0.16);
+    height: clamp(240px, 30vh, 310px);
+    min-height: 240px;
+    max-height: 310px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.architecture-viewer__panel.is-pinned {
+    box-shadow: 0 28px 80px rgba(192, 96, 56, 0.24);
+}
+
+.architecture-viewer__panel-column {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.8vw, 16px);
+    flex: 1 1 240px;
+    min-width: 200px;
+}
+
+.architecture-viewer__panel-column--primary {
+    flex: 1 1 300px;
+}
+
+.architecture-viewer__panel-column--media {
+    flex: 0.75 1 240px;
+}
+
+.architecture-viewer__panel-column--meta {
+    flex: 1 1 240px;
+}
+
+.architecture-viewer:not(.has-media) .architecture-viewer__panel-column--media,
+.architecture-viewer__panel:not(.has-media) .architecture-viewer__panel-column--media {
+    display: none;
+}
+
+.architecture-viewer__header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.architecture-viewer__control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.architecture-viewer__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary, #405c78);
+}
+
+.architecture-viewer__select-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #7c8a9b);
+}
+
+.architecture-viewer__select {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary, #405c78);
+    box-shadow: 0 6px 16px rgba(64, 92, 120, 0.16);
+    appearance: none;
+    cursor: pointer;
+}
+
+.architecture-viewer__select:focus {
+    outline: none;
+    border-color: rgba(192, 96, 56, 0.8);
+    box-shadow: 0 0 0 2px rgba(192, 96, 56, 0.25);
+}
+
+.architecture-viewer__subtitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary, #405c78);
+}
+
+.architecture-viewer__summary {
+    margin: 0;
+    color: var(--text-secondary, #7c8a9b);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    min-height: 2.2em;
+}
+
+.architecture-viewer__media[hidden] {
+    display: none;
+}
+
+.architecture-viewer__media img {
+    width: 100%;
+    height: auto;
+    border-radius: 0.85rem;
+    box-shadow: 0 16px 32px rgba(64, 92, 120, 0.18);
+    animation: architecture-viewer-fade-in 0.25s ease forwards;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+.architecture-viewer__panel.has-media {
+    gap: clamp(14px, 3vw, 26px);
+}
+
+.architecture-viewer__stats {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 0.9rem;
+}
+
+.architecture-viewer__stats dt {
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary, #7c8a9b);
+}
+
+.architecture-viewer__stats dd {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #405c78);
+}
+
+.architecture-viewer__details {
+    margin: 0;
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: var(--text-secondary, #7c8a9b);
+}
+
+.architecture-viewer__details li::marker {
+    color: rgba(192, 96, 56, 0.9);
+}
+
+@keyframes architecture-viewer-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.architecture-viewer__canvas {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: calc(clamp(260px, 42vw, 520px) * var(--model-scale));
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 1px rgba(64, 92, 120, 0.08);
+    overflow: hidden;
+}
+
+.architecture-viewer__viewport {
+    position: relative;
+    width: 100%;
+    height: 60%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform-origin: center;
+    transform: scale(var(--model-scale));
+}
+
+.architecture-viewer__svg-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.architecture-viewer__object {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: inset 0 0 0 1px rgba(64, 92, 120, 0.06);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.architecture-viewer__object.loaded {
+    opacity: 1;
+}
+
+.architecture-viewer__loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #7c8a9b);
+    pointer-events: none;
+}
+
+@media (max-width: 1080px) {
+    .architecture-viewer {
+        padding: clamp(10px, 6vw, 26px);
+    }
+
+    .architecture-viewer__canvas {
+        min-height: calc(clamp(240px, 56vw, 460px) * var(--model-scale-medium));
+    }
+
+    .architecture-viewer__viewport {
+        transform: scale(var(--model-scale-medium));
+    }
+}
+
+@media (max-width: 720px) {
+    .architecture-viewer__panel {
+        flex-direction: column;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .architecture-viewer__panel-column {
+        min-width: unset;
+    }
+
+    .architecture-viewer__viewport {
+        transform: scale(var(--model-scale-small));
+    }
+
+    .architecture-viewer__canvas {
+        min-height: calc(220px * var(--model-scale-small));
+    }
+}
