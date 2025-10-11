@@ -109,6 +109,8 @@ function updateMapLayout(count) {
     const container = selectElement("#map-view-container");
     container.innerHTML = '';
     container.dataset.mapCount = count;
+
+    const groundTruthToggle = document.querySelector("#toggle-ground-truth");
     
     unsyncMaps();
     mapControllers.forEach(controller => controller.teardown());
@@ -222,6 +224,7 @@ function initialise() {
   elements.toggleQCBoundary.addEventListener('change', (e) => {
     mapControllers.forEach(c => c.toggleQCBoundary(e.target.checked));
   });
+
   updateMapLayout(1);
 
   initializeUploadWorkflow({
