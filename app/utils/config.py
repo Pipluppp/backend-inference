@@ -21,6 +21,11 @@ MODEL_MAPPING = {
         "model_file": "convnext-sat-xqkdckas.pth",
         "modality": "satellite",
     },
+    "convnext_bh": {
+        "model_name": "ConvNeXtUNet",
+        "model_file": "convnext-bh.pth",
+        "modality": "bh",
+    },
     "settlenet": {
         "model_name": "SettleNet",
         "model_file": "settlenet-rxrj9b9b.pth",

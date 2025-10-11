@@ -11,6 +11,10 @@ const MODALITY_RULES = {
     disabled: true,
     options: [{ label: "Building Count", value: "building_count" }],
   },
+  convnext_bh: {
+    disabled: true,
+    options: [{ label: "Building Height", value: "building_height" }],
+  },
   convnext_satellite: {
     disabled: true,
     options: [{ label: "Satellite", value: "satellite" }],

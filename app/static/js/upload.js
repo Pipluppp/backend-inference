@@ -2,6 +2,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MODALITY_MAP = {
   satellite: "satellite",
   building_count: "bc",
+  building_height: "bh",
   all: "all",
 };
 
