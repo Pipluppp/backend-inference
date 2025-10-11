@@ -109,6 +109,8 @@ function updateMapLayout(count) {
     const container = selectElement("#map-view-container");
     container.innerHTML = '';
     container.dataset.mapCount = count;
+
+    const groundTruthToggle = document.querySelector("#toggle-ground-truth");
     
     unsyncMaps();
     mapControllers.forEach(controller => controller.teardown());
@@ -184,6 +186,7 @@ function initialise() {
     mapCountSelect: selectElement("#map-count-select"),
     mapSection: selectElement("#map-section"),
     panelToggleBtn: selectElement("#panel-toggle-btn"),
+    toggleQCBoundary: selectElement("#toggle-qc-boundary"),
   };
 
   bindHeroInteractions({
@@ -218,6 +221,10 @@ function initialise() {
     }, 350);
   });
 
+  elements.toggleQCBoundary.addEventListener('change', (e) => {
+    mapControllers.forEach(c => c.toggleQCBoundary(e.target.checked));
+  });
+
   updateMapLayout(1);
 
   initializeUploadWorkflow({
@@ -228,6 +235,7 @@ function initialise() {
         setInputLayer: (layer) => mapControllers[0]?.setInputLayer(layer),
         toggleInput: (visible) => mapControllers[0]?.toggleInput(visible),
         toggleMask: (visible) => mapControllers.forEach(c => c.toggleMask(visible)),
+        toggleQCBoundary: (visible) => mapControllers.forEach(c => c.toggleQCBoundary(visible)),
     },
     onResult: (result, context) => {
       handleInferenceResult({

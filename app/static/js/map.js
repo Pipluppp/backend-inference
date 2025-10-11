@@ -1,6 +1,67 @@
 const DEFAULT_VIEW = [14.65, 121.05];
 const DEFAULT_ZOOM = 11;
 const RASTER_PANE = "rasterPane";
+const QC_BOUNDARY_PANE = "qcBoundaryPane";
+
+const GROUND_TRUTH_PANE = "groundTruthPane";
+
+const GROUND_TRUTH_CONFIG = {
+    url: "/static/map/groundtruth.tif",
+    name: "Ground Truth Reference",
+    color: "rgba(253, 249, 1, 0.95)",
+    opacity: 0.8,
+};
+
+let groundTruthGeorasterPromise = null;
+
+async function loadGroundTruthGeoraster() {
+    if (!groundTruthGeorasterPromise) {
+        groundTruthGeorasterPromise = (async () => {
+            const parseGeoraster = window.parseGeoraster;
+            if (typeof parseGeoraster !== "function") {
+                throw new Error("GeoRaster parser is not available.");
+            }
+
+            const response = await fetch(GROUND_TRUTH_CONFIG.url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ground truth raster: ${response.status}`);
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            return parseGeoraster(arrayBuffer);
+        })().catch((error) => {
+            groundTruthGeorasterPromise = null;
+            throw error;
+        });
+    }
+
+    return groundTruthGeorasterPromise;
+}
+
+async function createGroundTruthLayer() {
+    const GeoRasterLayer = window.GeoRasterLayer;
+    if (typeof GeoRasterLayer !== "function") {
+        throw new Error("GeoRasterLayer is not available.");
+    }
+
+    const georaster = await loadGroundTruthGeoraster();
+
+    return new GeoRasterLayer({
+        georaster,
+        opacity: GROUND_TRUTH_CONFIG.opacity,
+        resolution: 256,
+        pane: GROUND_TRUTH_PANE,
+        debugLevel: 0,
+        pixelValuesToColorFn: (values) => {
+            const rawValue = Array.isArray(values) ? values[0] : values;
+            const numericValue = Number(rawValue);
+            if (!Number.isFinite(numericValue) || numericValue <= 0) {
+                return null;
+            }
+            return GROUND_TRUTH_CONFIG.color;
+        },
+    });
+}
 
 // --- Custom Leaflet Control for Info Labels ---
 const InfoLabelControl = L.Control.extend({
@@ -96,8 +157,47 @@ export function createMapController({
     DEFAULT_VIEW,
     DEFAULT_ZOOM,
   );
+
   map.createPane(RASTER_PANE);
-  map.getPane(RASTER_PANE).style.zIndex = 650;
+  map.getPane(RASTER_PANE).style.zIndex = 450;
+
+  map.createPane(QC_BOUNDARY_PANE);
+  map.getPane(QC_BOUNDARY_PANE).style.zIndex = 500;
+  map.getPane(QC_BOUNDARY_PANE).style.pointerEvents = 'none';
+
+  map.createPane(GROUND_TRUTH_PANE);
+  map.getPane(GROUND_TRUTH_PANE).style.zIndex = 475; // z-index is correct
+  map.getPane(GROUND_TRUTH_PANE).style.pointerEvents = 'none';
+
+  let qcBoundaryLayer = null;
+
+  const qcBoundaryStyle = {
+      "color": "#ffffff",
+      "weight": 2.5,
+      "opacity": 0.75,
+      "fillOpacity": 0.05,
+      "pane": QC_BOUNDARY_PANE
+  };
+
+  fetch('/static/map/qc-boundary-merged.geojson')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok for qc-boundary.geojson');
+        }
+        return response.json();
+    })
+    .then(data => {
+        qcBoundaryLayer = L.geoJSON(data, { style: qcBoundaryStyle });
+        const toggle = document.querySelector('#toggle-qc-boundary');
+        if (toggle && toggle.checked) {
+            qcBoundaryLayer.addTo(map);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading or parsing qc-boundary.geojson:', error);
+        if (onStatusUpdate) onStatusUpdate("Could not load QC boundary.");
+    });
+
   const infoLabel = L.control.infoLabel({ position: 'bottomright' }).addTo(map);
 
   const defaultFlyPadding = L.point(48, 48);
@@ -119,15 +219,36 @@ export function createMapController({
     }
   }
 
+  let groundTruthLayer = null;
+
   createBaseLayers(map, onStatusUpdate)
-    .then((control) => { 
+    .then((control) => {
       layerControl = control;
       while (pendingOverlayRegistrations.length > 0) {
         const { layer, name } = pendingOverlayRegistrations.shift();
         layerControl.addOverlay(layer, name);
       }
+      // If ground truth layer finished loading first, add it now.
+      if (groundTruthLayer) {
+        layerControl.addOverlay(groundTruthLayer, GROUND_TRUTH_CONFIG.name);
+      }
     })
     .catch((error) => console.error("Failed to initialise base layers", error));
+
+    createGroundTruthLayer()
+    .then((layer) => {
+      groundTruthLayer = layer;
+      // If the layer control is already created, add the ground truth layer to it.
+      if (layerControl) {
+        layerControl.addOverlay(groundTruthLayer, GROUND_TRUTH_CONFIG.name);
+      }
+    })
+    .catch((error) => {
+      console.error("Failed to load ground truth layer", error);
+      if (onStatusUpdate) {
+        onStatusUpdate("Could not load ground truth reference layer.");
+      }
+    });
 
   let maskVisible = true;
   let inputLayer = null;
@@ -160,6 +281,7 @@ export function createMapController({
   }
 
   map.on("overlayadd", (event) => {
+    if (event.layer === groundTruthLayer) return; // Not a prediction overlay
     const overlay = overlays.get(event.layer);
     if (overlay) {
         if (!isGlobalMaskToggleInProgress) overlay.shouldDisplay = true;
@@ -168,6 +290,7 @@ export function createMapController({
   });
 
   map.on("overlayremove", (event) => {
+    if (event.layer === groundTruthLayer) return; // Not a prediction overlay
     const overlay = overlays.get(event.layer);
     if (overlay) {
         if (!isGlobalMaskToggleInProgress) overlay.shouldDisplay = false;
@@ -242,6 +365,18 @@ export function createMapController({
       if (inputVisible) addLayerSafely(inputLayer);
       else removeLayerSafely(inputLayer);
     },
+
+    toggleQCBoundary(visible) {
+        if (!qcBoundaryLayer) return; 
+
+        if (visible) {
+            map.addLayer(qcBoundaryLayer);
+        } else {
+            map.removeLayer(qcBoundaryLayer);
+        }
+    },
+
+    // REMOVED: The toggleGroundTruth function is no longer needed
 
     fitToBounds(boundsObject, options = {}) {
       if (!boundsObject) return;
