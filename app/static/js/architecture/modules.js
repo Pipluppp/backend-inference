@@ -417,8 +417,7 @@ const settleNetModuleBlueprint = [
     summary: "RGB stream uses 64×3×256×256 tiles.",
     stats: [
       { label: "Tensor", value: "[3, 256, 256]" },
-      { label: "Role", value: "Vision backbone input" },
-      { label: "Augmentation", value: "RGB only" },
+      { label: "Role", value: "RGB image input" },
     ],
     details: [],
     margin: 5,
@@ -430,8 +429,7 @@ const settleNetModuleBlueprint = [
     summary: "Height stream uses 64×1×256×256 raster.",
     stats: [
       { label: "Tensor", value: "[1, 256, 256]" },
-      { label: "Role", value: "Auxiliary encoder input" },
-      { label: "Acquisition", value: "DSM derived" },
+      { label: "Role", value: "Building height image input" },
     ],
     details: [],
     margin: 5,
@@ -443,8 +441,7 @@ const settleNetModuleBlueprint = [
     summary: "Density stream uses 64×1×256×256 raster.",
     stats: [
       { label: "Tensor", value: "[1, 256, 256]" },
-      { label: "Role", value: "Context encoder input" },
-      { label: "Scaling", value: "Min–max normalised" },
+      { label: "Role", value: "Building count image input" },
     ],
     details: [],
     margin: 5,
@@ -759,9 +756,9 @@ export const MODEL_REGISTRY = {
   },
   settlenet: {
     id: "settlenet",
-    label: "SettleNet triple encoder",
+    label: "SettleNet",
     svgPath: "media/architecture/architecture-convnext.svg",
-    panelTitle: "SettleNet Triple Encoder Explorer",
+    panelTitle: "SettleNet Explorer",
     ariaLabel: "SettleNet architecture diagram",
     buildModules: buildSettleNetModules,
     scale: {
