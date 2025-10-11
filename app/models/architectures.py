@@ -162,6 +162,68 @@ class ConvNeXtDecoder(nn.Module):
         return self.final_conv_out(x)
 
 
+class UNetDecoder(nn.Module):
+    """Classic U-Net style decoder fed by ConvNeXt encoder skips."""
+
+    def __init__(self, config: Config, encoder_channels: list[int]):
+        super().__init__()
+        s1_ch, s2_ch, s3_ch, s4_ch = encoder_channels
+        d4_ch, d3_ch, d2_ch, d1_ch = config.UNET_DECODER_CHANNEL_LIST
+
+        def double_conv(in_ch: int, out_ch: int) -> nn.Sequential:
+            return nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+
+        self.bottleneck = double_conv(s4_ch, s4_ch)
+
+        self.up1 = nn.ConvTranspose2d(s4_ch, d4_ch, kernel_size=2, stride=2)
+        self.dec_block1 = double_conv(d4_ch + s3_ch, d4_ch)
+
+        self.up2 = nn.ConvTranspose2d(d4_ch, d3_ch, kernel_size=2, stride=2)
+        self.dec_block2 = double_conv(d3_ch + s2_ch, d3_ch)
+
+        self.up3 = nn.ConvTranspose2d(d3_ch, d2_ch, kernel_size=2, stride=2)
+        self.dec_block3 = double_conv(d2_ch + s1_ch, d2_ch)
+
+        self.up4 = nn.ConvTranspose2d(d2_ch, d1_ch, kernel_size=2, stride=2)
+        self.dec_block4 = double_conv(d1_ch, d1_ch)
+
+        final_channels = config.FINAL_UPSAMPLING_CHANNELS[-1]
+        self.final_up = nn.ConvTranspose2d(
+            d1_ch, final_channels, kernel_size=2, stride=2
+        )
+        self.final_conv_out = nn.Conv2d(final_channels, 1, kernel_size=1)
+
+    def forward(self, features: dict):
+        s1, s2, s3, s4 = features["s1"], features["s2"], features["s3"], features["s4"]
+
+        bottleneck = self.bottleneck(s4)
+
+        x = self.up1(bottleneck)
+        x = torch.cat([x, s3], dim=1)
+        x = self.dec_block1(x)
+
+        x = self.up2(x)
+        x = torch.cat([x, s2], dim=1)
+        x = self.dec_block2(x)
+
+        x = self.up3(x)
+        x = torch.cat([x, s1], dim=1)
+        x = self.dec_block3(x)
+
+        x = self.up4(x)
+        x = self.dec_block4(x)
+
+        x = self.final_up(x)
+        return self.final_conv_out(x)
+
+
 class ConvNeXtUNet(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -176,6 +238,31 @@ class ConvNeXtUNet(nn.Module):
             nn.init.trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        features = self.encoder(x)
+        return self.decoder(features)
+
+
+class ConvNeXtUNet_PlainDecoder(nn.Module):
+    """ConvNeXt encoder paired with the plain U-Net decoder."""
+
+    def __init__(self, config: Config):
+        super().__init__()
+        self.encoder = ConvNeXtEncoder(config, in_chans=config.INPUT_CHANNELS)
+        self.decoder = UNetDecoder(
+            config, encoder_channels=self.encoder.output_channels
+        )
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         features = self.encoder(x)

@@ -15,7 +15,11 @@ import tempfile
 import zipfile
 import shutil
 
-from app.models.architectures import ConvNeXtUNet, SettleNet
+from app.models.architectures import (
+    ConvNeXtUNet,
+    ConvNeXtUNet_PlainDecoder,
+    SettleNet,
+)
 from app.utils.config import Config, setup_config, get_model_config
 from app.utils.data_processing import (
     load_and_preprocess_image,
@@ -93,6 +97,8 @@ def load_model_by_type(model_type: str) -> Tuple[torch.nn.Module, "Config"]:
 
             if model_name == "ConvNeXtUNet":
                 model = ConvNeXtUNet(config_for_shape)
+            elif model_name == "ConvNeXtUNet_PlainDecoder":
+                model = ConvNeXtUNet_PlainDecoder(config_for_shape)
             elif model_name == "SettleNet":
                 model = SettleNet(config_for_shape)
             else:
@@ -167,11 +173,32 @@ def process_upload_job(
             missing_dirs = ", ".join(f"{name}-256" for name in missing)
             raise ValueError(f"Required directories missing from ZIP: {missing_dirs}")
 
-        satellite_files = list(tile_dirs["satellite"].glob("*.tif"))
-        if not satellite_files:
-            raise ValueError("No .tif files found in satellite-256 directory")
+        available_files: Dict[str, List[Path]] = {}
+        for dir_key in required_dirs:
+            files = list(tile_dirs[dir_key].glob("*.tif"))
+            if not files:
+                raise ValueError(f"No .tif files found in {dir_key}-256 directory")
+            available_files[dir_key] = files
 
-        file_ids = [f.stem for f in satellite_files]
+        if "satellite" in available_files:
+            reference_key = "satellite"
+        else:
+            reference_key = required_dirs[0]
+
+        file_ids = [f.stem for f in available_files[reference_key]]
+
+        for dir_key in required_dirs:
+            if dir_key == reference_key:
+                continue
+            missing_files = [
+                file_id
+                for file_id in file_ids
+                if not (tile_dirs[dir_key] / f"{file_id}.tif").exists()
+            ]
+            if missing_files:
+                raise ValueError(
+                    f"Missing tiles in {dir_key}-256 directory: {', '.join(missing_files[:5])}"
+                )
         total_tiles = len(file_ids)
         update_progress(
             job_id,
