@@ -460,6 +460,11 @@ body.scrolled .hero {
     grid-template-rows: 1fr 1fr;
 }
 
+.analysis-map__viewer[data-map-count="6"] {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
 .map-instance {
     position: relative;
     width: 100%;
