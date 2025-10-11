@@ -1,0 +1,415 @@
+:root {
+    --model-scale: 0.65;
+    --model-scale-medium: 0.55;
+    --model-scale-small: 0.45;
+    --architecture-canvas-height: clamp(450px, 45vh, 580px);
+}
+
+.architecture-viewer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 1.8vw, 16px);
+    padding: clamp(12px, 4vw, 28px);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(251, 248, 243, 0.9));
+    box-shadow: 0 28px 90px rgba(64, 92, 120, 0.18);
+    backdrop-filter: blur(10px);
+}
+
+.architecture-viewer__panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: clamp(12px, 2vw, 22px);
+    padding: clamp(14px, 3.5vw, 26px);
+    border-radius: 14px;
+    background: rgba(251, 248, 243, 0.96);
+    box-shadow: 0 20px 60px rgba(64, 92, 120, 0.16);
+    transition: box-shadow 0.3s ease;
+    height: clamp(300px, 30vh, 380px);
+    min-height: 300px;
+    max-height: 380px;
+    overflow: hidden;
+}
+
+.architecture-viewer__panel.is-pinned {
+    box-shadow: 0 28px 80px rgba(192, 96, 56, 0.24);
+}
+
+.architecture-viewer__panel-column {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.8vw, 16px);
+    min-width: 0;
+    contain: layout style;
+}
+
+.architecture-viewer__panel-column--primary {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.architecture-viewer__panel-column--media {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    min-height: 0;
+    align-self: stretch;
+    display: contents;
+}
+
+.architecture-viewer__panel-column--meta {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.architecture-viewer:not(.has-media) .architecture-viewer__panel-column--media,
+.architecture-viewer__panel:not(.has-media) .architecture-viewer__panel-column--media {
+    display: none;
+}
+
+.architecture-viewer__header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.architecture-viewer__control-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: nowrap;
+}
+
+.architecture-viewer__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary, #405c78);
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.architecture-viewer__select-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #7c8a9b);
+    flex: 0 0 auto;
+}
+
+.architecture-viewer__select {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary, #405c78);
+    box-shadow: 0 6px 16px rgba(64, 92, 120, 0.16);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    appearance: none;
+    cursor: pointer;
+}
+
+.architecture-viewer__select:hover {
+    border-color: rgba(192, 96, 56, 0.6);
+}
+
+.architecture-viewer__select:focus {
+    outline: none;
+    border-color: rgba(192, 96, 56, 0.8);
+    box-shadow: 0 0 0 2px rgba(192, 96, 56, 0.25);
+}
+
+.architecture-viewer__subtitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary, #405c78);
+    min-height: 1.5rem;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+.architecture-viewer__summary {
+    margin: 0;
+    color: var(--text-secondary, #7c8a9b);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    min-height: 4em;
+    max-height: 6em;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+.architecture-viewer__media[hidden] {
+    visibility: hidden;
+    opacity: 0;
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.architecture-viewer__media {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: stretch;
+    justify-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s ease;
+}
+
+.architecture-viewer__media img {
+    width: 70%;
+    height: 70%;
+    border-radius: 0.85rem;
+    box-shadow: 0 16px 32px rgba(64, 92, 120, 0.18);
+    animation: architecture-viewer-fade-in 0.25s ease forwards;
+    object-fit: contain;
+}
+
+.architecture-viewer__panel.has-media {
+    gap: clamp(14px, 3vw, 26px);
+}
+
+.architecture-viewer__stats {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 0.9rem;
+    min-height: 3em;
+    align-content: start;
+}
+
+.architecture-viewer__stats dt {
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary, #7c8a9b);
+    white-space: nowrap;
+}
+
+.architecture-viewer__stats dd {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #405c78);
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.architecture-viewer__details {
+    margin: 0;
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: var(--text-secondary, #7c8a9b);
+    min-height: 2.5em;
+}
+
+.architecture-viewer__details li {
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.architecture-viewer__details li::marker {
+    color: rgba(192, 96, 56, 0.9);
+}
+
+@keyframes architecture-viewer-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.architecture-viewer__canvas {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: var(--architecture-canvas-height);
+    height: var(--architecture-canvas-height);
+    background: rgba(251, 248, 243, 0.96);
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 1px rgba(64, 92, 120, 0.08);
+    overflow: visible;
+    padding: clamp(8px, 1.5vw, 20px);
+}
+
+.architecture-viewer__viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform-origin: center;
+    flex: 1;
+}
+
+.architecture-viewer__svg-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+.architecture-viewer__object {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    border: 0;
+    background: transparent;
+    border-radius: 14px;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.architecture-viewer__object.loaded {
+    opacity: 1;
+}
+
+.architecture-viewer__loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #7c8a9b);
+    pointer-events: none;
+}
+
+@media (max-width: 1080px) {
+    .architecture-viewer {
+        padding: clamp(10px, 6vw, 26px);
+    }
+
+    :root {
+        --architecture-canvas-height: clamp(280px, 42vh, 460px);
+    }
+
+    .architecture-viewer__panel {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .architecture-viewer__control-row {
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .architecture-viewer__select-group {
+        width: 100%;
+    }
+
+    .architecture-viewer__title {
+        flex: 1 1 100%;
+    }
+
+    :root {
+        --architecture-canvas-height: clamp(240px, 40vh, 380px);
+    }
+
+    .architecture-viewer__panel {
+        grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .architecture-viewer__panel-column {
+        min-width: unset;
+    }
+
+    .architecture-viewer__panel-column--primary,
+    .architecture-viewer__panel-column--media,
+    .architecture-viewer__panel-column--meta {
+        grid-column: 1;
+    }
+}
+
+/* Smooth scrollbar styling */
+.architecture-viewer__panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.architecture-viewer__panel::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.08);
+    border-radius: 10px;
+}
+
+.architecture-viewer__panel::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+    transition: background 0.2s ease;
+}
+
+.architecture-viewer__panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+.architecture-viewer__summary::-webkit-scrollbar {
+    width: 4px;
+}
+
+.architecture-viewer__summary::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.architecture-viewer__summary::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+
+/* Focus visible for keyboard navigation */
+.architecture-viewer__select:focus-visible {
+    outline: 2px solid rgba(192, 96, 56, 0.8);
+    outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

@@ -147,6 +147,14 @@ Exposes generated GeoTIFF/PNG overlays.
 - **Device selection** – change `device = torch.device("cpu")` at the top of `app/main.py` if GPU inference is required.
 - **Leaflet defaults** – tweak initial bounds/zoom or UI styling inside `prototype-v3.html`.
 
+## Architecture Explorer
+
+- **Location** – the viewer lives in the "Architecture Explorer" section of `prototype-v3.html` and lazy-loads when scrolled into view.
+- **Assets** – SVGs and supporting imagery are stored under `app/static/media/architecture/`.
+- **Modules** – interactive metadata resides in `app/static/js/architecture/modules.js`, while `viewer.js` contains the interaction logic.
+- **Integration** – `app/static/js/main.js` dynamically imports `architecture/index.js`, which mounts the viewer if `[data-architecture-viewer]` exists on the page.
+- **Extending** – to add a new architecture, drop the SVG asset into the media directory, add a blueprint entry in `modules.js`, and it will appear in the dropdown automatically.
+
 ## Troubleshooting
 
 - **Zip validation errors** – ensure the uploaded archive contains the modality folders required by the chosen model.

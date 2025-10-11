@@ -238,6 +238,21 @@ function initialise() {
     },
     onError: (message) => console.warn("Upload workflow error", message),
   });
+
+  const architectureRoot = document.querySelector('[data-architecture-viewer]');
+  if (architectureRoot) {
+    import('./architecture/index.js')
+      .then(({ mountArchitectureViewerLazy }) => {
+        mountArchitectureViewerLazy({
+          root: architectureRoot,
+          assetBase: '/static/',
+          initialModelId: architectureRoot.dataset.initialModel,
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to initialise architecture viewer', error);
+      });
+  }
 }
 
 if (document.readyState === "loading") {
