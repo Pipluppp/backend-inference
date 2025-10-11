@@ -425,6 +425,12 @@ export function createArchitectureViewer({
     svgRoot = doc.querySelector("svg");
     if (!svgRoot) return;
 
+    // Ensure SVG fills container properly
+    svgRoot.setAttribute("width", "100%");
+    svgRoot.setAttribute("height", "100%");
+    svgRoot.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svgRoot.style.display = "block";
+
     attachModuleInteractions(currentModules);
     resetInfo();
   };
