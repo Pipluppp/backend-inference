@@ -72,10 +72,10 @@
 
 .architecture-viewer__control-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.6rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .architecture-viewer__title {
@@ -86,6 +86,8 @@
     line-height: 1.4;
     overflow-wrap: break-word;
     hyphens: auto;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .architecture-viewer__select-group {
@@ -97,6 +99,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-secondary, #7c8a9b);
+    flex: 0 0 auto;
 }
 
 .architecture-viewer__select {
@@ -246,7 +249,7 @@
     width: 100%;
     min-height: var(--architecture-canvas-height);
     height: var(--architecture-canvas-height);
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(251, 248, 243, 0.96);
     border-radius: 16px;
     box-shadow: inset 0 0 0 1px rgba(64, 92, 120, 0.08);
     overflow: visible;
@@ -319,6 +322,19 @@
 }
 
 @media (max-width: 720px) {
+    .architecture-viewer__control-row {
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .architecture-viewer__select-group {
+        width: 100%;
+    }
+
+    .architecture-viewer__title {
+        flex: 1 1 100%;
+    }
+
     :root {
         --architecture-canvas-height: clamp(240px, 40vh, 380px);
     }

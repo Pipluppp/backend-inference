@@ -21,7 +21,7 @@ const convNeXtModuleBlueprint = [
     summary: "Batch 64 tiles, 5 channels, 256×256.",
     stats: [
       { label: "Tensor", value: "[5, 256, 256]" },
-      { label: "Role", value: "Data ingestion" },
+      { label: "Role", value: "Data input" },
     ],
     details: [],
     margin: 3,
